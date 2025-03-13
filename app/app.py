@@ -171,7 +171,7 @@ def add_security_headers(response):
     csp_policy = (
         f"default-src 'none';"
         f"script-src 'self' https://cdn.socket.io 'nonce-{csp_nonce}';"
-        "connect-src 'self' wss://tudominio.com;"
+        "connect-src 'self' wss://tv.localapp.io;"
         "style-src 'self' 'unsafe-inline';"
         "img-src 'self' data: https://i.ytimg.com;"
         "frame-src https://www.youtube.com;"
