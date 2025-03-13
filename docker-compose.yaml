@@ -22,13 +22,9 @@ services:
       ]
     depends_on:
       - valkey
-    volumes:
-      - ./app:/app
 
   valkey:
     image: valkey/valkey
-    ports:
-      - "6379:6379"
     volumes:
       - valkey_data:/data
 

@@ -120,9 +120,15 @@ def calculate_layout(stream_count):
     return [sqrt + (1 if sqrt * sqrt < stream_count else 0), sqrt]
 
 def extract_youtube_id(url):
-    regex = r"(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
-    match = re.search(regex, url)
-    return match.group(1) if match else None
+    patterns = [
+        r'(?:v=|be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})',
+        r'\/live\/([a-zA-Z0-9_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
 
 def add_stream():
     url = request.json.get('url')
@@ -138,12 +144,13 @@ def add_stream():
             'url': f'https://youtube.com/embed/{video_id}',
             'muted': 'true'
         })
-    
+    print(f"[DEBUG] Stream agregado: {video_id}")
     update_clients()
     return jsonify({'message': 'Stream agregado'}), 201
 
 def update_clients():
     streams = get_all_streams()
+    print(f"[DEBUG] Emitiendo update para {len(streams)} streams")
     layout = calculate_layout(len(streams))
     socketio.emit('update', {'streams': streams, 'layout': layout})
 
@@ -171,7 +178,7 @@ def add_security_headers(response):
     csp_policy = (
         f"default-src 'none';"
         f"script-src 'self' https://cdn.socket.io 'nonce-{csp_nonce}';"
-        "connect-src 'self' wss://tv.localapp.io;"
+        "connect-src 'self' ws://localhost:5000;"
         "style-src 'self' 'unsafe-inline';"
         "img-src 'self' data: https://i.ytimg.com;"
         "frame-src https://www.youtube.com;"
