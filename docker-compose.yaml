@@ -7,9 +7,19 @@ services:
     environment:
       - REDIS_URL=redis://valkey:6379/0
       - FLASK_ENV=production
+      - GUNICORN_WORKERS=4
+      - SESSION_COOKIE_SECURE=true
       - ADMIN_USER=admin
       - ADMIN_PASS=mi_password_seguro
       - SESSION_SECRET_KEY=mi_clave_secreta_compleja
+    command: [
+      "gunicorn",
+      "app:app",
+      "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker",
+      "-w", "4",
+      "-b", "0.0.0.0:5000",
+      "--log-level", "warning"
+      ]
     depends_on:
       - valkey
     volumes:

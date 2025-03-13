@@ -1,6 +1,9 @@
 Flask
 Flask-Session
-Flask-SocketIO
+Flask-socketio
+gevent
+gevent-websocket
+gunicorn
 python-engineio
 python-socketio
 redis

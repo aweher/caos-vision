@@ -1,114 +1,197 @@
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO, emit
-import re
-import redis
 import os
+import re
+import hashlib
+from base64 import b64encode
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask_session import Session
+from flask_socketio import SocketIO, emit
+import redis
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-socketio = SocketIO(app, cors_allowed_origins="*")
+app.config.update(
+    SECRET_KEY=os.getenv('SESSION_SECRET_KEY', 'dev-secret-key'),
+    SESSION_TYPE='redis',
+    SESSION_PERMANENT=False,
+    SESSION_USE_SIGNER=True,
+    SESSION_REDIS=redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379/0')),
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax'
+)
 
-# Configurar conexión a Valkey
+# Configurar Redis
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 r = redis.Redis.from_url(redis_url, decode_responses=True)
-try:
-    r.ping()
-    print("✅ Conexión a Redis exitosa")
-except redis.ConnectionError:
-    print("❌ No se pudo conectar a Redis")
-    exit(1)
+Session(app)
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*",
+                   engineio_logger=False,
+                   async_mode='gevent',
+                   cookie='auth_token',
+                   manage_session=False)
+
+# Configuración de seguridad
+ADMIN_USER = os.getenv('ADMIN_USER', 'admin')
+ADMIN_PASS_HASH = hashlib.sha256(
+    os.getenv('ADMIN_PASS', 'admin123').encode()
+).hexdigest()
+
+# Decorador de autenticación
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        
+        if username == ADMIN_USER and password_hash == ADMIN_PASS_HASH:
+            session['authenticated'] = True
+            session.permanent = True
+            return redirect(url_for('admin'))
+        
+        return render_template('login.html', error='Credenciales inválidas')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/admin')
+@login_required
+def admin():
+    return render_template('admin.html')
+
+# API Endpoints
+@app.route('/api/streams', methods=['GET', 'POST'])
+@login_required
+def handle_streams():
+    if request.method == 'GET':
+        return jsonify(get_all_streams()), 200
+    elif request.method == 'POST':
+        return add_stream()
+
+@app.route('/api/streams/<stream_id>', methods=['DELETE'])
+@login_required
+def remove_stream(stream_id):
+    r.delete(f"stream:{stream_id}")
+    update_clients()
+    return jsonify({'message': 'Stream eliminado'}), 200
+
+@app.route('/api/streams/<stream_id>/mute', methods=['POST'])
+@login_required
+def toggle_mute(stream_id):
+    stream_key = f"stream:{stream_id}"
+    current_mute = r.hget(stream_key, 'muted') or 'true'
+    new_mute = 'false' if current_mute == 'true' else 'true'
+    r.hset(stream_key, 'muted', new_mute)
+    update_clients()
+    return jsonify({'message': 'Sonido actualizado'}), 200
+
+# Funciones auxiliares
+def get_all_streams():
+    streams = []
+    for key in r.scan_iter("stream:*"):
+        stream_data = r.hgetall(key)
+        streams.append({
+            'id': stream_data['id'],
+            'url': stream_data['url'],
+            'muted': stream_data.get('muted', 'true') == 'true'
+        })
+    return streams
 
 def calculate_layout(stream_count):
     if stream_count == 0:
-        return []
-    rows = int(stream_count**0.5)
-    cols = rows if rows * rows == stream_count else rows + 1
-    return [rows, cols]
+        return [0, 0]
+    sqrt = int(stream_count ** 0.5)
+    return [sqrt + (1 if sqrt * sqrt < stream_count else 0), sqrt]
 
 def extract_youtube_id(url):
     regex = r"(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
     match = re.search(regex, url)
     return match.group(1) if match else None
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/admin')
-def admin():
-    return render_template('admin.html')
-
-@socketio.on('connect')
-def handle_connect():
-    streams = get_all_streams()
-    current_layout = calculate_layout(len(streams))
-    emit('update', {'streams': streams, 'layout': current_layout})
-
-def get_all_streams():
-    streams = []
-    try:
-        for key in r.scan_iter("stream:*"):
-            stream_data = r.hgetall(key)
-            # Convertir string a booleano
-            streams.append({
-                'id': stream_data['id'],
-                'url': stream_data['url'],
-                'muted': stream_data.get('muted', 'true').lower() == 'true'
-            })
-    except redis.RedisError as e:
-        print(f"Error al obtener streams: {str(e)}")
-    return streams
-
-@app.route('/api/streams', methods=['POST'])
 def add_stream():
     url = request.json.get('url')
     video_id = extract_youtube_id(url)
     
     if not video_id:
-        return jsonify({'error': 'URL de YouTube inválida'}), 400
+        return jsonify({'error': 'URL inválida'}), 400
     
     stream_key = f"stream:{video_id}"
-    try:
-        # Convertir valores booleanos a strings
+    if not r.exists(stream_key):
         r.hset(stream_key, mapping={
             'id': video_id,
             'url': f'https://youtube.com/embed/{video_id}',
-            'muted': 'true'  # Usar string en lugar de bool
+            'muted': 'true'
         })
-    except redis.RedisError as e:
-        return jsonify({'error': f'Error en Redis: {str(e)}'}), 500
     
-    streams = get_all_streams()
-    current_layout = calculate_layout(len(streams))
-    socketio.emit('update', {'streams': streams, 'layout': current_layout})
+    update_clients()
     return jsonify({'message': 'Stream agregado'}), 201
 
-@app.route('/api/streams/<stream_id>', methods=['DELETE'])
-def remove_stream(stream_id):
-    r.delete(f"stream:{stream_id}")
-    
+def update_clients():
     streams = get_all_streams()
-    current_layout = calculate_layout(len(streams))
-    socketio.emit('update', {'streams': streams, 'layout': current_layout})
-    return jsonify({'message': 'Stream eliminado'}), 200
+    layout = calculate_layout(len(streams))
+    socketio.emit('update', {'streams': streams, 'layout': layout})
 
-@app.route('/api/streams/<stream_id>/mute', methods=['POST'])
-def toggle_mute(stream_id):
-    stream_key = f"stream:{stream_id}"
-    current_mute = r.hget(stream_key, 'muted')
-    new_mute = 'False' if current_mute == 'True' else 'True'
-    r.hset(stream_key, 'muted', new_mute)
-    
-    streams = get_all_streams()
-    socketio.emit('update', {'streams': streams})
-    return jsonify({'message': 'Sonido actualizado'}), 200
+@app.context_processor
+def inject_nonce():
+    return {'csp_nonce': b64encode(os.urandom(16)).decode('utf-8')}
 
-@app.route('/api/streams', methods=['GET'])
-def get_streams():
-    return jsonify(get_all_streams()), 200
+# WebSocket handlers
+@socketio.on('connect')
+def handle_connect():
+    if session.get('authenticated'):
+        emit('update', {'streams': get_all_streams(), 'layout': calculate_layout(len(get_all_streams()))})
+
+@app.before_request
+def check_auth():
+    public_routes = ['/', '/login', '/static/styles.css']
+    if not request.path.startswith(tuple(public_routes)) and not session.get('authenticated'):
+        if request.path.startswith('/api'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return redirect(url_for('login'))
+
+@app.after_request
+def add_security_headers(response):
+    csp_nonce = b64encode(os.urandom(16)).decode('utf-8')
+    csp_policy = (
+        f"default-src 'none';"
+        f"script-src 'self' https://cdn.socket.io 'nonce-{csp_nonce}';"
+        "connect-src 'self' wss://tudominio.com;"
+        "style-src 'self' 'unsafe-inline';"
+        "img-src 'self' data: https://i.ytimg.com;"
+        "frame-src https://www.youtube.com;"
+        "font-src 'self';"
+        "form-action 'self';"
+        "base-uri 'self';"
+        "object-src 'none';"
+        "frame-ancestors 'none';"
+    )
+    response.headers['Content-Security-Policy'] = csp_policy
+    return response
 
 if __name__ == '__main__':
-    socketio.run(app, 
-                 host='0.0.0.0', 
-                 debug=False,  # Cambiar a False en producción
-                 allow_unsafe_werkzeug=True)  # Añadir este parámetro
+    try:
+        r.ping()
+        print("✅ Conexión a Redis exitosa")
+        socketio.run(app, 
+                   host='0.0.0.0', 
+                   debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
+                   allow_unsafe_werkzeug=True)
+    except redis.ConnectionError:
+        print("❌ Error de conexión con Redis")
+        exit(1)
