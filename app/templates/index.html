@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Caos Vision</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div id="grid-container"></div>
+    
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const players = {};
+
+        function createPlayer(stream) {
+            const iframe = document.createElement('iframe');
+            iframe.src = `${stream.url}?autoplay=1&mute=${stream.muted ? 1 : 0}`;
+            iframe.allow = 'autoplay; encrypted-media';
+            iframe.allowFullscreen = true;
+            return iframe;
+        }
+
+        function updateGrid(data) {
+            const container = document.getElementById('grid-container');
+            container.style.gridTemplateRows = `repeat(${data.layout[0]}, 1fr)`;
+            container.style.gridTemplateColumns = `repeat(${data.layout[1]}, 1fr)`;
+
+            data.streams.forEach((stream, index) => {
+                if (!players[stream.id]) {
+                    const player = createPlayer(stream);
+                    player.id = `player-${stream.id}`;
+                    container.appendChild(player);
+                    players[stream.id] = player;
+                }
+            });
+
+            Object.keys(players).forEach(playerId => {
+                if (!data.streams.find(s => s.id === playerId)) {
+                    container.removeChild(players[playerId]);
+                    delete players[playerId];
+                }
+            });
+        }
+
+        socket.on('update', updateGrid);
+
+        function toggleFullscreen(elementId) {
+            const element = document.getElementById(elementId);
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                element.requestFullscreen().catch(err => {
+                    console.error('Error al intentar pantalla completa:', err);
+                });
+            }
+        }
+    </script>
+</body>
+</html>

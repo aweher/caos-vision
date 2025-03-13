@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - Caos Vision</title>
+    <style>
+        .admin-panel {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .stream-list {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-panel">
+        <h1>Panel de Control</h1>
+        
+        <div class="controls">
+            <input type="text" id="stream-url" placeholder="URL de YouTube">
+            <button onclick="addStream()">Agregar Stream</button>
+        </div>
+
+        <div class="stream-list">
+            <h3>Streams Activos:</h3>
+            <div id="streams-container"></div>
+        </div>
+    </div>
+
+    <script>
+        async function addStream() {
+            const url = document.getElementById('stream-url').value;
+            const response = await fetch('/api/streams', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url })
+            });
+            
+            if (response.ok) {
+                document.getElementById('stream-url').value = '';
+            }
+        }
+
+        async function updateStreamList() {
+            const response = await fetch('/api/streams');
+            if (!response.ok) {
+                console.error('Error obteniendo streams');
+                return;
+            }
+            const streams = await response.json();
+            const container = document.getElementById('streams-container');
+            
+            container.innerHTML = streams.map(stream => `
+                <div class="stream-item">
+                    ${stream.url}
+                    <button onclick="toggleMute('${stream.id}')">
+                        ${stream.muted ? 'Encender sonido' : 'Silenciar'}
+                    </button>
+                    <button onclick="removeStream('${stream.id}')">Eliminar</button>
+                </div>
+            `).join('');
+        }
+
+        async function removeStream(id) {
+            await fetch(`/api/streams/${id}`, { method: 'DELETE' });
+        }
+
+        async function toggleMute(id) {
+            await fetch(`/api/streams/${id}/mute`, { method: 'POST' });
+        }
+
+        setInterval(updateStreamList, 2000);
+        updateStreamList();
+    </script>
+</body>
+</html>

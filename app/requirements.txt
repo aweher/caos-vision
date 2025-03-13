@@ -1,0 +1,6 @@
+Flask
+Flask-Session
+Flask-SocketIO
+python-engineio
+python-socketio
+redis
