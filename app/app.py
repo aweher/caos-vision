@@ -7,8 +7,21 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from flask_session import Session
 from flask_socketio import SocketIO, emit
 import redis
+import logging
+from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Log a consola
+        RotatingFileHandler('app.log', maxBytes=100000, backupCount=3)
+    ]
+)
+logger = logging.getLogger(__name__)
+
 app.config.update(
     SECRET_KEY=os.getenv('SESSION_SECRET_KEY', 'dev-secret-key'),
     SESSION_TYPE='redis',
@@ -144,13 +157,13 @@ def add_stream():
             'url': f'https://youtube.com/embed/{video_id}',
             'muted': 'true'
         })
-    print(f"[DEBUG] Stream agregado: {video_id}")
+    logger.info(f"[DEBUG] Stream agregado: {video_id}")
     update_clients()
     return jsonify({'message': 'Stream agregado'}), 201
 
 def update_clients():
     streams = get_all_streams()
-    print(f"[DEBUG] Emitiendo update para {len(streams)} streams")
+    logger.info(f"[DEBUG] Emitiendo update para {len(streams)} streams")
     layout = calculate_layout(len(streams))
     socketio.emit('update', {'streams': streams, 'layout': layout})
 
@@ -194,11 +207,11 @@ def add_security_headers(response):
 if __name__ == '__main__':
     try:
         r.ping()
-        print("✅ Conexión a Redis exitosa")
+        logger.info("✅ Conexión a Redis exitosa")
         socketio.run(app, 
                    host='0.0.0.0', 
                    debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
                    allow_unsafe_werkzeug=True)
     except redis.ConnectionError:
-        print("❌ Error de conexión con Redis")
+        logger.info("❌ Error de conexión con Redis")
         exit(1)

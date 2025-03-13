@@ -13,13 +13,16 @@ services:
       - ADMIN_PASS=mi_password_seguro
       - SESSION_SECRET_KEY=mi_clave_secreta_compleja
     command: [
-      "gunicorn",
-      "app:app",
-      "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker",
-      "-w", "4",
-      "-b", "0.0.0.0:5000",
-      "--log-level", "warning"
-      ]
+        "gunicorn",
+        "app:app",
+        "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker",
+        "-w", "4",
+        "-b", "0.0.0.0:5000",
+        "--log-level", "info",  # Cambiar de warning a info
+        "--access-logfile", "-",  # Logs de acceso a consola
+        "--error-logfile", "-",  # Logs de error a consola
+        "--capture-output"  # Capturar print statements
+    ]
     depends_on:
       - valkey
 
