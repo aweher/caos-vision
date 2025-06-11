@@ -176,3 +176,51 @@ cython_debug/
 # ASW
 .venv-*
 docker-compose.override.yaml
+
+# Caos Vision específicos
+# Logs generados por la aplicación
+logs/
+*.log
+
+# Archivos de configuración locales
+.env.local
+.env.production
+.env.development
+
+# Docker volumes y datos persistentes
+data/
+volumes/
+
+# Backups
+backup/
+*.backup
+
+# Certificados SSL locales
+certs/
+*.pem
+*.crt
+*.key
+
+# Archivos temporales de Cloudflare
+cloudflared.exe
+*.argotunnel.com
+
+# Archivos de test y debugging
+test_*.py
+debug_*.py
+.pytest_cache/
+
+# Screenshots y archivos de documentación temporales
+screenshots/
+demo/
+*.gif
+*.mp4
+
+# OS específicos
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
