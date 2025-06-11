@@ -90,7 +90,21 @@
             flex: 1;
             margin-right: 15px;
             overflow: hidden;
+        }
+
+        .stream-title {
+            color: var(--primary-color);
+            font-size: 16px;
+            margin-bottom: 5px;
+            overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .stream-id {
+            color: #7f8c8d;
+            font-size: 12px;
+            font-family: monospace;
         }
 
         .stream-actions {
@@ -251,7 +265,12 @@
             container.innerHTML = streams.map(stream => `
                 <div class="stream-item">
                     <div class="stream-info">
-                        ${sanitizeHtml(stream.url.replace('https://youtube.com/embed/', ''))}
+                        <div class="stream-title">
+                            <strong>${sanitizeHtml(stream.title || 'Video ' + stream.id)}</strong>
+                        </div>
+                        <div class="stream-id">
+                            ID: ${sanitizeHtml(stream.id)}
+                        </div>
                     </div>
                     <div class="stream-actions">
                         <button class="mute-btn ${stream.muted ? 'muted' : ''}" 

@@ -12,6 +12,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import time
 import json
+import requests
 
 app = Flask(__name__)
 
@@ -279,6 +280,7 @@ def get_all_streams():
                     streams.append({
                         'id': stream_data['id'],
                         'url': stream_data['url'],
+                        'title': stream_data.get('title', f"Video {stream_data['id']}"),
                         'muted': stream_data.get('muted', 'true') == 'true'
                     })
             except Exception as e:
@@ -305,6 +307,19 @@ def extract_youtube_id(url):
             return match.group(1)
     return None
 
+def get_youtube_title(video_id):
+    """Obtener el título de un video de YouTube usando la API oEmbed"""
+    try:
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        response = requests.get(oembed_url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('title', f'Video {video_id}')
+    except Exception as e:
+        logger.warning(f"Error obteniendo título para video {video_id}: {e}")
+    
+    return f'Video {video_id}'
+
 def add_stream():
     # Validación de entrada mejorada
     if not request.json:
@@ -327,12 +342,23 @@ def add_stream():
     try:
         stream_key = f"stream:{video_id}"
         if not r.exists(stream_key):
+            # Obtener título del video
+            title = get_youtube_title(video_id)
+            
             r.hset(stream_key, mapping={
                 'id': video_id,
                 'url': f'https://youtube.com/embed/{video_id}',
+                'title': title,
                 'muted': 'true'
             })
-        logger.info(f"Stream agregado: {video_id}")
+            logger.info(f"Stream agregado: {video_id} - {title}")
+        else:
+            # Si el stream ya existe pero no tiene título, agregarlo
+            if not r.hget(stream_key, 'title'):
+                title = get_youtube_title(video_id)
+                r.hset(stream_key, 'title', title)
+                logger.info(f"Título agregado a stream existente: {video_id} - {title}")
+        
         update_clients()
         return jsonify({'message': 'Stream agregado'}), 201
     except redis.RedisError as e:
