@@ -22,17 +22,52 @@
     
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
     <script nonce="{{ csp_nonce }}">
-        // Configurar Socket.IO con transporte websocket
-        const socket = io({
-        transports: ['websocket'],
-        reconnection: true,
-        upgrade: false
-        });
+        // Configurar Socket.IO para Cloudflare Tunnel
+        const isCloudflare = window.location.hostname.includes('trycloudflare.com') || 
+                           window.location.hostname.includes('cloudflare.com');
+        
+        const socketConfig = {
+            transports: ['websocket', 'polling'],  // Fallback para Cloudflare
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            upgrade: true,  // Permitir upgrade para Cloudflare
+            timeout: 20000,
+            forceNew: false
+        };
+        
+        // Configuración específica para Cloudflare Tunnel
+        if (isCloudflare) {
+            socketConfig.secure = true;
+            socketConfig.rejectUnauthorized = false;  // Para certificates dinámicos
+        }
+        
+        console.log('Conectando con configuración:', socketConfig);
+        const socket = io(socketConfig);
 
-        // Manejar errores
-        socket.on('connect_error', (err) => {
-        console.error('Error de conexión:', err);
+        // Manejar eventos de conexión
+        socket.on('connect', () => {
+            console.log('✅ Conectado al servidor via WebSocket');
         });
+        
+        socket.on('disconnect', (reason) => {
+            console.log('❌ Desconectado del servidor:', reason);
+        });
+        
+        socket.on('connect_error', (err) => {
+            console.error('❌ Error de conexión WebSocket:', err);
+            // Intentar reconectar con polling si WebSocket falla
+            if (socket.io.opts.transports[0] === 'websocket') {
+                console.log('🔄 Intentando reconectar con polling...');
+                socket.io.opts.transports = ['polling', 'websocket'];
+                socket.connect();
+            }
+        });
+        
+        socket.on('reconnect', (attemptNumber) => {
+            console.log(`🔄 Reconectado después de ${attemptNumber} intentos`);
+        });
+        
         const players = {};
 
         function createPlayer(stream) {
@@ -44,6 +79,7 @@
         }
 
         function updateGrid(data) {
+            console.log('📺 Actualizando grilla con', data.streams.length, 'streams');
             const container = document.getElementById('grid-container');
             container.style.gridTemplateRows = `repeat(${data.layout[0]}, 1fr)`;
             container.style.gridTemplateColumns = `repeat(${data.layout[1]}, 1fr)`;

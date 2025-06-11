@@ -12,24 +12,45 @@ services:
       - ADMIN_USER=admin
       - ADMIN_PASS=mi_password_seguro
       - SESSION_SECRET_KEY=mi_clave_secreta_compleja
-    command: [
-        "gunicorn",
-        "app:app",
-        "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker",
-        "-w", "4",
-        "-b", "0.0.0.0:5000",
-        "--log-level", "info",  # Cambiar de warning a info
-        "--access-logfile", "-",  # Logs de acceso a consola
-        "--error-logfile", "-",  # Logs de error a consola
-        "--capture-output"  # Capturar print statements
-    ]
+      # Configuración para Cloudflare Tunnel
+      - ALLOWED_ORIGINS=
+      - CLOUDFLARE_TUNNEL=true
+      - BEHIND_PROXY=true
+    # Usar el entrypoint definido en el Dockerfile
+    # command se puede omitir ya que CMD está definido en Dockerfile
     depends_on:
-      - valkey
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+    volumes:
+      - ./logs:/app/logs:rw
 
   valkey:
-    image: valkey/valkey
+    image: valkey/valkey:7-alpine
     volumes:
       - valkey_data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    sysctls:
+      - net.core.somaxconn=65535
+    command: [
+      "valkey-server",
+      "--maxmemory", "256mb",
+      "--maxmemory-policy", "allkeys-lru",
+      "--save", "60", "1000"
+    ]
 
 volumes:
   valkey_data:

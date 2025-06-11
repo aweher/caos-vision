@@ -174,10 +174,28 @@
             const urlInput = document.getElementById('stream-url');
             const url = urlInput.value.trim();
             
+            // Validaciones mejoradas
             if (!url) {
                 showError('Por favor ingresa una URL válida');
                 return;
             }
+            
+            // Validar formato básico de URL de YouTube
+            const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)/;
+            if (!youtubeRegex.test(url)) {
+                showError('Por favor ingresa una URL válida de YouTube');
+                return;
+            }
+            
+            if (url.length > 500) {
+                showError('URL demasiado larga');
+                return;
+            }
+
+            // Deshabilitar botón para prevenir spam
+            const addButton = document.querySelector('button[onclick="addStream()"]');
+            addButton.disabled = true;
+            addButton.textContent = 'Agregando...';
 
             try {
                 const response = await fetch('/api/streams', {
@@ -196,9 +214,15 @@
                 }
 
                 urlInput.value = '';
+                showSuccess('Stream agregado exitosamente');
                 updateStreamList();
             } catch (error) {
+                console.error('Error:', error);
                 showError('Error de conexión con el servidor');
+            } finally {
+                // Rehabilitar botón
+                addButton.disabled = false;
+                addButton.textContent = 'Agregar Stream';
             }
         }
 
@@ -227,15 +251,15 @@
             container.innerHTML = streams.map(stream => `
                 <div class="stream-item">
                     <div class="stream-info">
-                        ${stream.url.replace('https://youtube.com/embed/', '')}
+                        ${sanitizeHtml(stream.url.replace('https://youtube.com/embed/', ''))}
                     </div>
                     <div class="stream-actions">
                         <button class="mute-btn ${stream.muted ? 'muted' : ''}" 
-                                onclick="toggleMute('${stream.id}')">
+                                onclick="toggleMute('${sanitizeHtml(stream.id)}')">
                             ${stream.muted ? '🔇 Activar Sonido' : '🔊 Silenciar'}
                         </button>
                         <button class="delete-btn" 
-                                onclick="removeStream('${stream.id}')">
+                                onclick="removeStream('${sanitizeHtml(stream.id)}')">
                             🗑 Eliminar
                         </button>
                     </div>
@@ -291,7 +315,22 @@
         function showError(message) {
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
+            errorDiv.style.color = 'var(--error-color)';
+            setTimeout(() => errorDiv.textContent = '', 5000);
+        }
+        
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.color = 'green';
             setTimeout(() => errorDiv.textContent = '', 3000);
+        }
+
+        // Sanitizar HTML para prevenir XSS
+        function sanitizeHtml(str) {
+            const temp = document.createElement('div');
+            temp.textContent = str;
+            return temp.innerHTML;
         }
     </script>
 </body>
