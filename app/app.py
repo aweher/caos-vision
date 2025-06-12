@@ -440,16 +440,17 @@ def add_security_headers(response):
     
     csp_policy = (
         f"default-src 'none';"
-        f"script-src 'self' https://cdn.socket.io 'unsafe-inline';"  # Cloudflare a veces requiere unsafe-inline
+        f"script-src 'self' https://cdn.socket.io https://analytics.arreg.la 'unsafe-inline';"  # Added Matomo domain
         f"{ws_connect}"
         "style-src 'self' 'unsafe-inline';"
         "img-src 'self' data: https://i.ytimg.com;"
-        "frame-src https://www.youtube.com https://youtube.com;"
+        "frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com;"
         "font-src 'self';"
         "form-action 'self';"
         "base-uri 'self';"
         "object-src 'none';"
         "frame-ancestors 'none';"
+        "connect-src 'self' https://analytics.arreg.la;"  # Added Matomo domain for analytics
     )
     
     # Headers básicos de seguridad

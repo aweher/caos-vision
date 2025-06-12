@@ -72,9 +72,10 @@
 
         function createPlayer(stream) {
             const iframe = document.createElement('iframe');
-            iframe.src = `${stream.url}?autoplay=1&mute=${stream.muted ? 1 : 0}`;
-            iframe.allow = 'autoplay; encrypted-media';
+            iframe.src = `${stream.url}?autoplay=1&mute=${stream.muted ? 1 : 0}&enablejsapi=1&origin=${window.location.origin}`;
+            iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
             iframe.allowFullscreen = true;
+            iframe.setAttribute('loading', 'lazy');
             return iframe;
         }
 
