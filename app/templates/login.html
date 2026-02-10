@@ -1,34 +1,112 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Login - Caos Vision</title>
-    <style>
-        .login-container {
-            max-width: 400px;
-            margin: 100px auto;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        .error { color: red; }
-    </style>
-</head>
-<body>
-    <div class="login-container">
-        <h2>Acceso Administrativo</h2>
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
-        <form method="POST">
-            <div>
-                <label>Usuario:</label>
-                <input type="text" name="username" required>
+{% extends "base.html" %}
+
+{% block title %}{{ app_name }} - Login{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/admin.css">
+{% endblock %}
+
+{% block body_class %}login-page{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-box">
+        <h1>{{ app_name }}</h1>
+        <h2>Admin Login</h2>
+
+        <form id="login-form" class="login-form" method="post">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    required
+                    autocomplete="username"
+                    autofocus>
             </div>
-            <div>
-                <label>Contraseña:</label>
-                <input type="password" name="password" required>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    required
+                    autocomplete="current-password">
             </div>
-            <button type="submit">Ingresar</button>
+
+            <div id="login-error" class="error-message hidden"></div>
+
+            <button type="submit" class="btn btn-primary btn-full">Login</button>
         </form>
+
+        {% if viewer_url %}
+        <a href="{{ viewer_url }}" class="back-link">← Back to viewer</a>
+        {% endif %}
     </div>
-</body>
-</html>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+// Security: Clear any query parameters from URL (prevents credential exposure)
+if (window.location.search) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+// Get CSRF token from cookie
+function getCsrfToken() {
+    const match = document.cookie.match(/csrf_token=([^;]+)/);
+    return match ? match[1] : null;
+}
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const errorDiv = document.getElementById('login-error');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const csrfToken = getCsrfToken();
+
+    if (!csrfToken) {
+        errorDiv.textContent = 'Security token expired. Please refresh the page.';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    errorDiv.classList.add('hidden');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging in...';
+
+    try {
+        const response = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            window.location.href = data.redirect_url || '/admin';
+        } else {
+            errorDiv.textContent = data.detail || 'Login failed';
+            errorDiv.classList.remove('hidden');
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.classList.remove('hidden');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Login';
+    }
+});
+</script>
+{% endblock %}

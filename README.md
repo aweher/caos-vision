@@ -1,213 +1,362 @@
-# 🎥 Caos Vision
+# Caos Vision
 
-**Caos Vision** es una aplicación web que permite crear un **muro de videos de YouTube** donde se pueden visualizar múltiples streams simultáneamente en una grilla dinámica. Perfecto para monitoreo de eventos, entretenimiento o vigilancia de contenido.
+**Caos Vision** es una aplicacion web que permite crear un **muro de videos** donde se pueden visualizar multiples streams simultaneamente en una grilla dinamica. Soporta **YouTube, Twitch y Vimeo**. Perfecto para monitoreo de eventos, entretenimiento o vigilancia de contenido.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
-![Flask](https://img.shields.io/badge/flask-2.3.3-green.svg)
+![FastAPI](https://img.shields.io/badge/fastapi-0.109+-green.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## 🌟 Características Principales
+## Caracteristicas Principales
 
-### 🎬 **Gestión de Streams**
-- ✅ Soporte para videos, lives, shorts y embeds de YouTube
-- ✅ Extracción automática de ID de video desde diferentes formatos URL
-- ✅ Grilla responsive que se ajusta automáticamente
-- ✅ Control individual de sonido (mute/unmute)
+### Gestion de Streams
+- Soporte para **YouTube** (videos, lives, shorts, embeds)
+- Soporte para **Twitch** (canales en vivo, VODs)
+- Soporte para **Vimeo** (videos)
+- Extraccion automatica de metadatos via oEmbed (titulo, thumbnail, autor)
+- Grilla responsive que se ajusta automaticamente segun cantidad de streams
+- Control individual de sonido (mute/unmute)
+- Deteccion de duplicados antes de agregar streams
 
-### 🔐 **Seguridad Robusta**
-- ✅ Panel de administración protegido con autenticación
-- ✅ Rate limiting para prevenir ataques de fuerza bruta
-- ✅ Sesiones persistentes con Redis
-- ✅ Headers de seguridad (CSP, HSTS, etc.)
-- ✅ Contenedor Docker en modo solo-lectura
+### Seguridad
+- Panel de administracion protegido con autenticacion por sesion
+- Proteccion CSRF con patron double-submit cookie
+- Rate limiting por IP para prevenir ataques de fuerza bruta
+- Sesiones persistentes en Redis con expiracion configurable
+- Hashing de passwords con bcrypt + comparacion en tiempo constante
+- Headers de seguridad (CSP con nonces, X-Frame-Options, Referrer-Policy, Permissions-Policy)
+- Contenedor Docker en modo solo-lectura con usuario no-root
 
-### ⚡ **Tiempo Real**
-- ✅ Actualizaciones instantáneas vía WebSockets
-- ✅ Reconexión automática con fallback a polling
-- ✅ Sincronización entre múltiples clientes
+### Tiempo Real
+- Actualizaciones instantaneas via WebSockets nativos
+- WebSocket separado para viewers (publico) y admins (autenticado)
+- Reconexion automatica con backoff exponencial y jitter
+- Health check de conexion con ping/pong
+- Sincronizacion entre multiples clientes
+- Sin necesidad de recargar la pagina
 
-### 🌐 **Cloudflare Tunnel Ready**
-- ✅ Configuración automática para tunnels
-- ✅ Detección de headers Cloudflare
-- ✅ CORS dinámico para URLs arbitrarias
-- ✅ WebSocket compatible con proxies
+### Arquitectura Dual
+- **Viewer** (publico): Muestra la grilla de videos sin autenticacion
+- **Admin** (privado): Panel de gestion con autenticacion requerida
+- Ambas aplicaciones comparten la misma base de datos Redis/Valkey
+- Cada una se ejecuta como un contenedor independiente
 
-## 🚀 Instalación Rápida
+### Cloudflare Tunnel Ready
+- Configuracion automatica para tunnels
+- Deteccion de headers Cloudflare (CF-Ray, CF-Connecting-IP)
+- CORS dinamico para origenes configurables
+- WebSocket compatible con proxies
+
+## Instalacion Rapida
 
 ### Prerrequisitos
 - Docker y Docker Compose
-- Cloudflared (opcional, para tunnels)
 
-### 1. Clonar el Repositorio
+### Opcion 1: Script Interactivo (Recomendado)
+
 ```bash
 git clone https://github.com/aweher/caos-vision.git
 cd caos-vision
+./run.sh
 ```
 
-### 2. Configurar Variables de Entorno
+El script te guiara para configurar:
+- Credenciales de administrador
+- Clave secreta (generada automaticamente)
+- Puerto de exposicion
+- Configuracion de proxy/tunnel
+
+### Opcion 2: Configuracion Manual
+
 ```bash
+git clone https://github.com/aweher/caos-vision.git
+cd caos-vision
+
+# Copiar y editar configuracion
 cp env.example .env
-# Editar .env con tus credenciales
+# Editar .env con tus valores
+
+# Iniciar
+docker compose up -d
 ```
 
-### 3. Ejecutar con Docker
-```bash
-# Crear directorio de logs (opcional)
-mkdir -p ./logs
+### Acceder a la Aplicacion
 
-# Iniciar aplicación
-docker-compose up -d
+| URL | Descripcion |
+|-----|-------------|
+| `http://localhost:64500/` | Visor publico (para TV/browser) |
+| `http://localhost:64501/admin` | Panel de administracion |
+| `http://localhost:64501/login` | Pagina de login del admin |
 
-# Ver logs
-docker-compose logs -f caos-vision
-```
+> **Nota:** El visor y el admin corren como servicios separados en puertos distintos.  
+> El visor escucha en el puerto **64500** y el admin en el puerto **64501**.
 
-### 4. Acceder a la Aplicación
-- **Viewer público**: http://localhost:64500
-- **Panel admin**: http://localhost:64500/admin
-- **Credenciales**: Las configuradas en tu archivo `.env`
-
-## ⚙️ Configuración
-
-### Variables de Entorno Principales
+## Comandos del Script
 
 ```bash
-# Autenticación
-ADMIN_USER=admin
-ADMIN_PASS=tu_password_super_seguro
-SESSION_SECRET_KEY=una_clave_secreta_muy_larga_y_compleja
-
-# Redis
-REDIS_URL=redis://valkey:6379/0
-
-# Cloudflare Tunnel (opcional)
-CLOUDFLARE_TUNNEL=true
-ALLOWED_ORIGINS=  # Vacío para URLs dinámicas
+./run.sh              # Wizard completo de configuracion
+./run.sh --configure  # Solo configurar (sin iniciar)
+./run.sh --start      # Iniciar servicios
+./run.sh --dev        # Modo desarrollo con live reload
+./run.sh --stop       # Detener servicios
+./run.sh --restart    # Reiniciar servicios
+./run.sh --logs       # Ver logs en tiempo real
+./run.sh --status     # Ver estado de los servicios
+./run.sh --help       # Mostrar ayuda
 ```
 
-Ver `env.example` para todas las opciones disponibles.
+## Configuracion
 
-## 🌊 Uso con Cloudflare Tunnel
+### Variables de Entorno
+
+| Variable | Default | Descripcion |
+|----------|---------|-------------|
+| `DEBUG` | `false` | Habilita modo debug y docs de API (`/api/docs`) |
+| `SECRET_KEY` | `change-me-in-production` | Clave secreta para firmas y tokens |
+| `REDIS_URL` | `redis://localhost:6379/0` | URL de conexion a Redis/Valkey |
+| `ADMIN_USER` | `admin` | Nombre de usuario del administrador |
+| `ADMIN_PASS` | `admin` | Password del administrador |
+| `SESSION_EXPIRE_SECONDS` | `3600` | Tiempo de expiracion de sesion (segundos) |
+| `ALLOWED_ORIGINS` | `*` | Origenes CORS permitidos (separados por coma) |
+| `RATE_LIMIT_ATTEMPTS` | `5` | Intentos de login antes de bloqueo |
+| `RATE_LIMIT_WINDOW` | `300` | Ventana de rate limit (segundos) |
+| `CLOUDFLARE_TUNNEL` | `false` | Habilitar soporte para Cloudflare Tunnel |
+| `BEHIND_PROXY` | `false` | Indica si esta detras de un reverse proxy |
+| `VIEWER_URL` | _(vacio)_ | URL del visor (mostrada en la pagina de login del admin) |
+| `HOST` | `0.0.0.0` | Host de escucha |
+| `PORT` | `8000` | Puerto interno del contenedor |
+| `WORKERS` | `4` | Cantidad de workers de Uvicorn |
+
+## Uso con Cloudflare Tunnel
 
 ### Tunnel Temporal (Desarrollo)
 ```bash
-# Iniciar aplicación
-docker-compose up -d
-
-# Crear tunnel
+./run.sh --start
 cloudflared tunnel --url http://localhost:64500
 ```
 
-### Tunnel Permanente (Producción)
+### Tunnel Permanente (Produccion)
 ```bash
-# Crear tunnel
 cloudflared tunnel create caos-vision-prod
 cloudflared tunnel route dns caos-vision-prod caos.tu-dominio.com
-
-# Ejecutar tunnel
 cloudflared tunnel run caos-vision-prod
 ```
 
-📚 **Documentación completa**: Ver [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md)
+Ver [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md) para documentacion completa.
 
-## 📖 Guía de Uso
+## Guia de Uso
 
 ### Como Administrador
 
-1. **Acceder al Panel**
-   - Ir a `/admin`
-   - Login con credenciales configuradas
+1. Acceder a `http://localhost:64501/login` e iniciar sesion
+2. Pegar URL de video en el campo de texto
+3. Click en "Add Stream"
 
-2. **Agregar Streams**
-   - Pegar URL de YouTube en el campo
-   - Hacer clic en "Agregar Stream"
-   - Formatos soportados:
-     - `https://youtube.com/watch?v=VIDEO_ID`
-     - `https://youtu.be/VIDEO_ID`
-     - `https://youtube.com/embed/VIDEO_ID`
-     - `https://youtube.com/shorts/VIDEO_ID`
-
-3. **Gestionar Streams**
-   - **Silenciar/Activar**: Control individual de audio
-   - **Eliminar**: Remover streams de la grilla
-   - **Vista en tiempo real**: Los cambios se reflejan instantáneamente
+**URLs soportadas:**
+- YouTube: `youtube.com/watch?v=...`, `youtu.be/...`, `youtube.com/live/...`, `youtube.com/shorts/...`, `youtube.com/embed/...`
+- Twitch: `twitch.tv/canal`, `twitch.tv/videos/123`
+- Vimeo: `vimeo.com/123456`, `player.vimeo.com/video/123456`
 
 ### Como Viewer
 
-1. **Acceder a la Vista Principal**
-   - Ir a la URL principal (`/`)
-   - No requiere autenticación
+1. Abrir la URL del visor (`http://localhost:64500/`)
+2. Los videos se muestran automaticamente en una grilla adaptativa
+3. Los cambios del admin se reflejan en tiempo real via WebSocket
+4. Sin necesidad de autenticacion
 
-2. **Funcionalidades**
-   - **Auto-layout**: La grilla se organiza automáticamente
-   - **Pantalla completa**: Doble clic en cualquier video
-   - **Auto-actualización**: Nuevos streams aparecen automáticamente
+## Arquitectura
 
-## 🏗️ Arquitectura Técnica
-
-### Stack Tecnológico
-- **Backend**: Python 3.11, Flask, SocketIO
-- **Frontend**: HTML5, JavaScript vanilla, CSS3
-- **Base de datos**: Redis (sesiones y streams)
-- **Web Server**: Gunicorn con workers gevent
-- **Contenedor**: Docker con usuario no-root
+### Stack Tecnologico
+- **Backend**: Python 3.11, FastAPI 0.109+, Pydantic v2, WebSockets nativos
+- **Frontend**: HTML5, JavaScript vanilla, CSS3, Jinja2 templates
+- **Base de datos**: Valkey 7 (compatible con Redis)
+- **Web Server**: Uvicorn con workers
+- **Contenedor**: Docker multi-stage, multi-arquitectura (amd64/arm64)
+- **Seguridad**: bcrypt, itsdangerous, CSP con nonces
 
 ### Estructura del Proyecto
 ```
 caos-vision/
 ├── app/
-│   ├── app.py                 # Aplicación principal
-│   ├── entrypoint.sh          # Script de inicio
-│   ├── requirements.txt       # Dependencias Python
-│   ├── templates/             # Templates HTML
-│   │   ├── index.html         # Vista principal
-│   │   ├── admin.html         # Panel administración
-│   │   └── login.html         # Página de login
+│   ├── __init__.py
+│   ├── admin_main.py              # Entry point del Admin (FastAPI app)
+│   ├── viewer_main.py             # Entry point del Viewer (FastAPI app)
+│   ├── config.py                  # Configuracion (Pydantic Settings)
+│   ├── api/
+│   │   ├── deps.py                # Inyeccion de dependencias
+│   │   ├── websocket.py           # WebSocket endpoints + ConnectionManager
+│   │   └── v1/
+│   │       ├── router.py          # Router agregador (legacy)
+│   │       ├── admin_router.py    # Router del admin (auth + streams + health)
+│   │       ├── viewer_router.py   # Router del viewer (streams read-only + health)
+│   │       ├── auth.py            # Endpoints de autenticacion (login/logout/me)
+│   │       ├── streams.py         # CRUD de streams
+│   │       └── health.py          # Health checks y readiness probe
+│   ├── core/
+│   │   ├── security.py            # Hashing, sesiones, CSRF, IP extraction
+│   │   ├── middleware.py          # Security headers (CSP), CORS
+│   │   └── exceptions.py          # Excepciones custom y handlers
+│   ├── models/
+│   │   ├── stream.py              # Modelos de streams (plataformas, CRUD)
+│   │   ├── auth.py                # Modelos de autenticacion (login, sesion)
+│   │   └── websocket.py           # Modelos de mensajes WebSocket
+│   ├── services/
+│   │   ├── redis_service.py       # Operaciones Redis (streams, sesiones, rate limit)
+│   │   ├── session_service.py     # Gestion de sesiones y autenticacion
+│   │   ├── stream_service.py      # Logica de negocio de streams
+│   │   └── platform_extractors/
+│   │       ├── __init__.py        # Registry de extractores
+│   │       ├── base.py            # Interfaz abstracta
+│   │       ├── youtube.py         # Extractor YouTube (oEmbed)
+│   │       ├── twitch.py          # Extractor Twitch
+│   │       └── vimeo.py           # Extractor Vimeo (oEmbed)
+│   ├── templates/
+│   │   ├── base.html              # Template base Jinja2
+│   │   ├── login.html             # Pagina de login
+│   │   ├── admin.html             # Panel de administracion
+│   │   └── viewer.html            # Visor publico de streams
 │   └── static/
-│       └── styles.css         # Estilos CSS
-├── docker-compose.yaml        # Configuración Docker
-├── Dockerfile                 # Imagen Docker
-├── env.example               # Variables de entorno ejemplo
-├── CLOUDFLARE_SETUP.md       # Documentación Cloudflare
-└── README.md                 # Este archivo
+│       ├── css/
+│       │   ├── common.css         # Estilos compartidos
+│       │   ├── admin.css          # Estilos del admin
+│       │   └── viewer.css         # Estilos del viewer
+│       └── js/
+│           ├── websocket-client.js  # Cliente WebSocket con reconnect
+│           ├── admin.js             # Logica del admin
+│           └── viewer.js            # Logica del viewer
+├── docker-compose.yaml            # Produccion (viewer + admin + valkey)
+├── docker-compose.dev.yaml        # Desarrollo con live reload
+├── Dockerfile                     # Multi-stage build
+├── run.sh                         # Script interactivo de setup/deploy
+├── env.example                    # Ejemplo de variables de entorno
+└── LICENSE                        # MIT License
 ```
+
+### Servicios Docker
+
+| Servicio | Puerto | Descripcion |
+|----------|--------|-------------|
+| `caos-viewer` | 64500:8000 | Visor publico (4 workers) |
+| `caos-admin` | 64501:8000 | Panel de administracion (2 workers) |
+| `valkey` | _(interno)_ | Base de datos Valkey 7 (compatible Redis) |
 
 ### Flujo de Datos
-```mermaid
-graph TD
-    A[Usuario] --> B[Panel Admin]
-    B --> C[Flask App]
-    C --> D[Redis]
-    C --> E[SocketIO]
-    E --> F[Viewers]
-    F --> G[YouTube Embeds]
-    
-    H[Cloudflare Tunnel] --> C
-    I[Rate Limiting] --> C
-    J[Auth System] --> C
+```
+                    ┌──────────────────┐
+                    │   Admin (64501)  │
+                    │   FastAPI app    │
+                    │  ┌────────────┐  │
+Admin Browser ───►  │  │  Auth API  │  │ ──► Redis/Valkey
+                    │  │ Stream API │  │        │
+                    │  │ WebSocket  │  │        │
+                    │  └────────────┘  │        │
+                    └──────────────────┘        │
+                                                │
+                    ┌──────────────────┐        │
+                    │  Viewer (64500)  │        │
+                    │   FastAPI app    │        │
+                    │  ┌────────────┐  │        │
+TV / Browser ────►  │  │Streams API │  │ ──► Redis/Valkey
+                    │  │ WebSocket  │  │  (datos compartidos)
+                    │  └────────────┘  │
+                    └──────────────────┘
 ```
 
-## 🧪 Testing
+### WebSocket Messages
 
-### Script de Pruebas Automáticas
+| Tipo | Direccion | Descripcion |
+|------|-----------|-------------|
+| `stream_update` | Server -> Client | Lista completa de streams + layout |
+| `stream_added` | Server -> Client | Notificacion de stream agregado |
+| `stream_removed` | Server -> Client | Notificacion de stream eliminado |
+| `stream_muted` | Server -> Client | Cambio de estado mute |
+| `force_refresh` | Server -> Viewers | Forzar recarga de viewers |
+| `request_refresh` | Admin -> Server | Solicitar actualizacion |
+| `force_viewer_refresh` | Admin -> Server | Forzar refresh de viewers |
+| `ping` / `pong` | Bidireccional | Keepalive |
+
+## API REST
+
+### Admin API (puerto 64501)
+
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/auth/login` | Login (con CSRF) | No |
+| POST | `/api/v1/auth/logout` | Logout | Si |
+| GET | `/api/v1/auth/me` | Info de sesion actual | No |
+| GET | `/api/v1/streams` | Listar streams | No |
+| POST | `/api/v1/streams` | Agregar stream | Si |
+| DELETE | `/api/v1/streams/{id}` | Eliminar stream | Si |
+| POST | `/api/v1/streams/{id}/mute` | Toggle mute | Si |
+| GET | `/api/v1/health` | Health check basico | No |
+| GET | `/api/v1/health/ready` | Readiness probe (verifica Redis) | No |
+
+### Viewer API (puerto 64500)
+
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/streams` | Listar streams (read-only) | No |
+| GET | `/api/v1/health` | Health check basico | No |
+| GET | `/api/v1/health/ready` | Readiness probe (verifica Redis) | No |
+
+### WebSocket Endpoints
+
+| Endpoint | Descripcion | Auth |
+|----------|-------------|------|
+| `ws://host:64500/ws/viewer` | WebSocket para viewers | No |
+| `ws://host:64501/ws/admin` | WebSocket para admins | Si (cookie) |
+
+## Solucion de Problemas
+
+### WebSockets no funcionan
 ```bash
-# Ejecutar tests
-python test_session.py
-
-# Con URL personalizada
-python test_session.py --url https://tu-tunnel.trycloudflare.com
+./run.sh --logs
+# Verificar errores de conexion en los logs de ambos servicios
+docker compose logs caos-viewer | grep -i websocket
+docker compose logs caos-admin | grep -i websocket
 ```
 
-### Tests Manuales
-1. **Autenticación**: Login/logout, rate limiting
-2. **CRUD Streams**: Agregar, eliminar, modificar
-3. **WebSockets**: Actualizaciones en tiempo real
-4. **Responsive**: Diferentes tamaños de pantalla
+### Sesion no persiste
+```bash
+# Verificar Redis/Valkey
+docker compose exec valkey valkey-cli ping
+# Verificar que SECRET_KEY sea consistente entre reinicios
+```
 
-## 🔧 Desarrollo
+### Videos no cargan
+- Verificar que la URL sea valida y la plataforma este soportada
+- Algunos videos tienen restricciones de embed
+- Twitch requiere configurar el dominio parent correcto (se configura automaticamente)
+- Verificar CSP en los headers de respuesta
 
-### Entorno Local
+### Error de CSRF en login
+- Asegurarse de que las cookies no esten bloqueadas por el navegador
+- Si se usa proxy, verificar que `BEHIND_PROXY=true` y `CLOUDFLARE_TUNNEL=true` esten configurados
+
+### Logs utiles
+```bash
+./run.sh --logs                        # Todos los logs en tiempo real
+docker compose logs -f caos-viewer     # Solo logs del viewer
+docker compose logs -f caos-admin      # Solo logs del admin
+docker compose logs -f valkey          # Solo logs de Valkey
+```
+
+## Desarrollo Local
+
+### Con Docker (Recomendado)
+
+```bash
+git clone https://github.com/aweher/caos-vision.git
+cd caos-vision
+
+# Modo desarrollo con live reload
+./run.sh --dev
+```
+
+Esto levanta ambas aplicaciones con `--reload` habilitado y el codigo fuente montado como volumen.
+
+### Sin Docker
+
 ```bash
 # Clonar repositorio
 git clone https://github.com/aweher/caos-vision.git
@@ -215,115 +364,43 @@ cd caos-vision
 
 # Crear entorno virtual
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
+source venv/bin/activate
 
 # Instalar dependencias
 pip install -r app/requirements.txt
 
-# Variables de entorno para desarrollo
-cp env.example .env
-# Editar .env para desarrollo local
+# Iniciar Valkey/Redis
+docker run -d -p 6379:6379 valkey/valkey:7-alpine
 
-# Ejecutar Redis (requerido)
-docker run -d -p 6379:6379 redis:alpine
+# Configurar variables de entorno
+export ADMIN_USER=admin
+export ADMIN_PASS=admin
+export SECRET_KEY=development-secret-key-min-32-chars
+export REDIS_URL=redis://localhost:6379/0
+export DEBUG=true
 
-# Ejecutar aplicación
+# Ejecutar Viewer (terminal 1)
 cd app
-python app.py
+uvicorn viewer_main:app --reload --port 8000
+
+# Ejecutar Admin (terminal 2)
+cd app
+uvicorn admin_main:app --reload --port 8001
 ```
 
-### Contribuir
-1. Fork del proyecto
-2. Crear rama feature (`git checkout -b feature/AmazingFeature`)
-3. Commit cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abrir Pull Request
+## Casos de Uso
 
-## 📊 Casos de Uso
+- **Gaming & Streaming**: Monitorear multiples streamers simultaneamente
+- **Entretenimiento**: Walls de videos musicales, canales de noticias
+- **Empresarial**: Monitoreo de marca, eventos multi-camara
+- **Investigacion**: Analisis de tendencias de contenido
+- **NOC/Operaciones**: Monitoreo de streams de camaras o dashboards
 
-### 🎮 **Gaming & Streaming**
-- Monitorear múltiples streamers favoritos
-- Eventos de esports con diferentes ángulos
-- Compilaciones de highlights en vivo
+## Licencia
 
-### 📺 **Entretenimiento**
-- Walls de videos musicales
-- Canales de noticias simultáneos
-- Series web y podcasts
+Este proyecto esta bajo la Licencia MIT. Ver [LICENSE](LICENSE).
 
-### 🏢 **Empresarial**
-- Monitoreo de menciones de marca
-- Eventos corporativos multi-cámara
-- Training sessions y webinars
+## Soporte
 
-### 🔍 **Investigación**
-- Análisis de tendencias de contenido
-- Monitoreo de competencia
-- Investigación de mercado
-
-## 🚨 Solución de Problemas
-
-### Problemas Comunes
-
-**🔥 WebSockets no funcionan**
-```bash
-# Verificar logs
-docker-compose logs -f caos-vision
-
-# Verificar conectividad
-curl -I http://localhost:64500
-```
-
-**🍪 Sesión no persiste**
-```bash
-# Verificar variables de entorno
-docker-compose exec caos-vision env | grep SESSION
-
-# Verificar Redis
-docker-compose exec valkey redis-cli ping
-```
-
-**📹 Videos no cargan**
-- Verificar que la URL de YouTube sea válida
-- Algunos videos tienen restricciones de embed
-- Dominios de Cloudflare pueden estar bloqueados por YouTube
-
-### Logs Útiles
-```bash
-# Logs de aplicación
-docker-compose logs -f caos-vision
-
-# Logs de Redis
-docker-compose logs -f valkey
-
-# Logs en archivo (si está configurado)
-tail -f ./logs/app.log
-```
-
-## 🛣️ Roadmap
-
-### v2.0 (Próximo)
-- [ ] Layouts personalizables
-- [ ] Múltiples salas/canales
-- [ ] API REST completa
-
-### v3.0 (Futuro)
-- [ ] Chat integrado
-- [ ] Notificaciones push
-- [ ] Mobile app
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## 📞 Soporte
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/aweher/caos-vision/issues)
-- 📧 **Email**: ariel@weher.net
-
----
-
-**⭐ Si te gusta el proyecto, no olvides darle una estrella en GitHub!**
-
-*Desarrollado con ❤️ para la comunidad* 
+- Issues: [GitHub Issues](https://github.com/aweher/caos-vision/issues)
+- Email: ariel@weher.net

@@ -1,267 +1,350 @@
-# 🤝 Contribuyendo a Caos Vision
+# Contribuyendo a Caos Vision
 
-¡Gracias por tu interés en contribuir a **Caos Vision**! Este documento te ayudará a empezar de la mejor manera.
+Gracias por tu interes en contribuir a **Caos Vision**.
 
-## 🎯 Formas de Contribuir
+## Formas de Contribuir
 
-### 🐛 Reportar Bugs
-- Usa el [template de bug report](https://github.com/aweher/caos-vision/issues/new?template=bug_report.md)
+### Reportar Bugs
+- Usa los [GitHub Issues](https://github.com/aweher/caos-vision/issues)
 - Incluye pasos para reproducir el problema
-- Especifica tu entorno (OS, Docker version, etc.)
-- Adjunta logs relevantes
+- Especifica tu entorno (OS, Docker version, browser)
+- Adjunta logs relevantes (`./run.sh --logs`)
 
-### 💡 Sugerir Features
-- Usa el [template de feature request](https://github.com/aweher/caos-vision/issues/new?template=feature_request.md)
+### Sugerir Features
+- Abre un Issue describiendo la funcionalidad
 - Explica el problema que resuelve
-- Describe la solución propuesta
 - Considera alternativas
 
-### 🔧 Contribuir Código
+### Contribuir Codigo
 - Fork el repositorio
 - Crea una rama para tu feature/fix
-- Sigue las convenciones de código
-- Escribe tests si es aplicable
-- Actualiza documentación
+- Sigue las convenciones de codigo
+- Actualiza documentacion si es necesario
 
-## 🚀 Configuración de Desarrollo
+## Configuracion de Desarrollo
 
 ### Prerrequisitos
-```bash
-# Requerido
 - Python 3.11+
 - Docker & Docker Compose
 - Git
 
-# Recomendado
-- VS Code con extensiones Python
-- Redis Insight para debugging
-- Cloudflared para testing tunnels
-```
+### Setup con Docker (Recomendado)
 
-### Setup Local
 ```bash
 # 1. Fork y clonar
-git clone https://github.com/aweher/caos-vision.git
+git clone https://github.com/TU_USUARIO/caos-vision.git
+cd caos-vision
+
+# 2. Iniciar en modo desarrollo (hot reload)
+./run.sh --dev
+```
+
+Esto levanta tres servicios:
+- **caos-viewer** en `http://localhost:64500` (visor publico)
+- **caos-admin** en `http://localhost:64501` (panel de administracion)
+- **valkey** (base de datos Redis-compatible)
+
+El codigo fuente se monta como volumen, por lo que los cambios se reflejan automaticamente.
+
+### Setup Local (Sin Docker para la app)
+
+```bash
+# 1. Fork y clonar
+git clone https://github.com/TU_USUARIO/caos-vision.git
 cd caos-vision
 
 # 2. Configurar entorno Python
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r app/requirements.txt
-pip install -r requirements-dev.txt  # Si existe
 
-# 3. Configurar variables de entorno
-cp env.example .env
-# Editar .env con valores de desarrollo
+# 3. Iniciar Valkey/Redis
+docker run -d -p 6379:6379 valkey/valkey:7-alpine
 
-# 4. Iniciar servicios
-docker-compose -f docker-compose.dev.yml up -d redis
+# 4. Variables de entorno
+export ADMIN_USER=admin
+export ADMIN_PASS=admin
+export SECRET_KEY=development-secret-key-min-32-chars
+export REDIS_URL=redis://localhost:6379/0
+export DEBUG=true
 
-# 5. Ejecutar aplicación
+# 5. Ejecutar Viewer (terminal 1)
 cd app
-python app.py
+uvicorn viewer_main:app --reload --port 8000
+
+# 6. Ejecutar Admin (terminal 2)
+cd app
+uvicorn admin_main:app --reload --port 8001
 ```
 
-## 📋 Convenciones de Código
+> **Nota:** La aplicacion tiene dos entry points separados: `viewer_main:app` (visor publico) y `admin_main:app` (panel de admin). Ambos comparten la misma base de datos Redis.
+
+## Estructura del Proyecto
+
+```
+caos-vision/
+├── app/
+│   ├── __init__.py
+│   ├── admin_main.py              # Entry point Admin (FastAPI app)
+│   ├── viewer_main.py             # Entry point Viewer (FastAPI app)
+│   ├── config.py                  # Configuracion (Pydantic Settings)
+│   ├── api/
+│   │   ├── deps.py                # Inyeccion de dependencias (auth, redis, servicios)
+│   │   ├── websocket.py           # WebSocket endpoints + ConnectionManager
+│   │   └── v1/
+│   │       ├── router.py          # Router agregador (legacy)
+│   │       ├── admin_router.py    # Router del admin (auth + streams + health)
+│   │       ├── viewer_router.py   # Router del viewer (streams read-only + health)
+│   │       ├── auth.py            # Endpoints de autenticacion (login/logout/me)
+│   │       ├── streams.py         # CRUD de streams (con broadcast WebSocket)
+│   │       └── health.py          # Health checks y readiness probe
+│   ├── core/
+│   │   ├── security.py            # Hashing (bcrypt), sesiones, CSRF, IP extraction
+│   │   ├── middleware.py          # Security headers (CSP con nonces), CORS
+│   │   └── exceptions.py          # Excepciones custom y handlers globales
+│   ├── models/
+│   │   ├── stream.py              # Modelos de streams (plataformas, request/response)
+│   │   ├── auth.py                # Modelos de auth (login, sesion, logout)
+│   │   └── websocket.py           # Modelos tipados de mensajes WebSocket
+│   ├── services/
+│   │   ├── redis_service.py       # Operaciones Redis (streams, sesiones, rate limit)
+│   │   ├── session_service.py     # Autenticacion y gestion de sesiones
+│   │   ├── stream_service.py      # Logica de negocio (add, delete, mute, layout)
+│   │   └── platform_extractors/
+│   │       ├── __init__.py        # Registry de extractores
+│   │       ├── base.py            # Interfaz abstracta (BasePlatformExtractor)
+│   │       ├── youtube.py         # Extractor YouTube (oEmbed API)
+│   │       ├── twitch.py          # Extractor Twitch (channels + VODs)
+│   │       └── vimeo.py           # Extractor Vimeo (oEmbed API)
+│   ├── templates/                 # HTML Jinja2 (base, login, admin, viewer)
+│   └── static/
+│       ├── css/                   # Estilos (common, admin, viewer)
+│       └── js/                    # Scripts (websocket-client, admin, viewer)
+├── Dockerfile                     # Multi-stage build (Python 3.11-slim)
+├── docker-compose.yaml            # Produccion (viewer + admin + valkey)
+├── docker-compose.dev.yaml        # Desarrollo (hot reload, volumes)
+├── run.sh                         # Script interactivo de setup/deploy
+├── env.example                    # Ejemplo de variables de entorno
+└── LICENSE                        # MIT License
+```
+
+## Convenciones de Codigo
 
 ### Python
 ```python
-# Usar PEP 8
-# Nombres descriptivos
-# Docstrings para funciones públicas
-def get_youtube_video_id(url: str) -> Optional[str]:
-    """
-    Extrae el ID de video de una URL de YouTube.
-    
+# Usar type hints en todos los parametros y retornos
+# Docstrings para funciones publicas
+# PEP 8
+# Pydantic v2 para modelos de datos
+# async/await para operaciones I/O
+
+async def get_stream(stream_id: str) -> StreamResponse:
+    """Obtiene un stream por su ID.
+
     Args:
-        url: URL de YouTube en cualquier formato
-        
+        stream_id: ID unico del stream
+
     Returns:
-        ID del video o None si no es válida
+        StreamResponse con los datos del stream
+
+    Raises:
+        StreamNotFoundError: Si el stream no existe
     """
     pass
 ```
 
 ### JavaScript
 ```javascript
-// Usar camelCase
+// Usar camelCase para variables y funciones
+// Clases con PascalCase
 // Funciones async/await
-// Manejo de errores explícito
+// Manejo de errores explicito
+
 async function addStream(url) {
     try {
-        // lógica aquí
+        const response = await fetch('/api/v1/streams', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        if (!response.ok) throw new Error('Failed to add stream');
+        return await response.json();
     } catch (error) {
         console.error('Error adding stream:', error);
-        showError('Error al agregar stream');
+        throw error;
     }
 }
 ```
 
 ### CSS
 ```css
-/* Usar variables CSS */
+/* Usar variables CSS para colores y valores repetidos */
 /* Mobile-first approach */
-/* Nombres de clases descriptivos */
-.stream-container {
-    /* estilos aquí */
+/* BEM para nombres de clases */
+
+.stream-wrapper {
+    /* estilos */
 }
 
-.stream-container--loading {
+.stream-wrapper--fullscreen {
     /* modificador */
 }
 ```
 
-## 🧪 Testing
+## Proceso de Pull Request
 
-### Tests Unitarios
+### 1. Crear rama
 ```bash
-# Ejecutar tests
-python -m pytest tests/
-
-# Con coverage
-python -m pytest --cov=app tests/
-
-# Test específico
-python -m pytest tests/test_auth.py::test_login
-```
-
-### Tests de Integración
-```bash
-# Test completo del sistema
-python test_session.py
-
-# Test con Cloudflare Tunnel
-python test_session.py --url https://tu-tunnel.trycloudflare.com
-```
-
-### Tests Manuales
-- [ ] Login/logout funciona
-- [ ] Agregar/eliminar streams
-- [ ] WebSocket actualizaciones
-- [ ] Responsive design
-- [ ] Cross-browser compatibility
-
-## 📝 Proceso de Pull Request
-
-### 1. Preparación
-```bash
-# Crear rama desde main
 git checkout main
 git pull origin main
 git checkout -b feature/nueva-funcionalidad
-
-# O para bug fix
+# o
 git checkout -b fix/descripcion-del-bug
 ```
 
 ### 2. Desarrollo
-- Hacer commits pequeños y descriptivos
-- Seguir [Conventional Commits](https://www.conventionalcommits.org/)
+Commits pequenos y descriptivos usando [Conventional Commits](https://www.conventionalcommits.org/):
 ```bash
-git commit -m "feat: add stream search functionality"
-git commit -m "fix: resolve websocket connection issues"
+git commit -m "feat: add twitch vod support"
+git commit -m "fix: resolve websocket reconnection issue"
 git commit -m "docs: update API documentation"
+git commit -m "refactor: split main.py into admin and viewer apps"
 ```
 
 ### 3. Testing
-```bash
-# Asegurar que todos los tests pasan
-python -m pytest
-python test_session.py
 
-# Verificar que la aplicación inicia correctamente
-docker-compose up -d
+```bash
+# Con Docker (recomendado)
+./run.sh --dev
+
+# Probar manualmente:
+# - Login/logout en http://localhost:64501/login
+# - Agregar/eliminar streams de cada plataforma (YouTube, Twitch, Vimeo)
+# - WebSocket: verificar actualizaciones en tiempo real en el viewer
+# - Abrir el viewer en http://localhost:64500 y confirmar sincronizacion
+# - Rate limiting: intentar multiples logins fallidos
+# - Responsive design en diferentes tamaños de pantalla
 ```
 
 ### 4. Pull Request
-- Título descriptivo
-- Descripción detallada de cambios
+- Titulo descriptivo
+- Descripcion de cambios
 - Screenshots si hay cambios UI
 - Referenciar issues relacionados
 
-## 🎨 Guías de Estilo
+## Agregar Nueva Plataforma
 
-### Commits
-```
-<tipo>(<scope>): <descripción>
+Para agregar soporte para una nueva plataforma de streaming:
 
-feat(auth): add rate limiting to login
-fix(websocket): resolve connection drops
-docs(readme): update installation guide
-style(css): improve responsive design
-refactor(api): simplify stream management
-test(auth): add login validation tests
-chore(docker): update base image
+### 1. Agregar al enum en `app/models/stream.py`:
+```python
+class StreamPlatform(str, Enum):
+    YOUTUBE = "youtube"
+    TWITCH = "twitch"
+    VIMEO = "vimeo"
+    NEWPLATFORM = "newplatform"  # Nuevo
 ```
 
-### Ramas
+### 2. Crear extractor en `app/services/platform_extractors/`:
+```python
+# app/services/platform_extractors/newplatform.py
+from typing import Optional
+
+from models.stream import StreamMetadata, StreamPlatform
+from services.platform_extractors.base import BasePlatformExtractor
+
+
+class NewPlatformExtractor(BasePlatformExtractor):
+    platform = StreamPlatform.NEWPLATFORM
+
+    def can_handle(self, url: str) -> bool:
+        return "newplatform.com" in url.lower()
+
+    def extract_id(self, url: str) -> Optional[str]:
+        # Implementar extraccion de ID con regex
+        pass
+
+    def get_embed_url(self, video_id: str, host: str = "localhost") -> str:
+        return f"https://embed.newplatform.com/{video_id}"
+
+    async def get_metadata(self, video_id: str) -> StreamMetadata:
+        # Implementar obtencion de metadatos (oEmbed, API, etc.)
+        return StreamMetadata(title=f"NewPlatform Video {video_id}")
 ```
-feature/nombre-funcionalidad
-fix/descripcion-bug
-hotfix/problema-critico
-docs/actualizacion-documentacion
-refactor/mejora-codigo
+
+### 3. Registrar en `app/services/platform_extractors/__init__.py`:
+```python
+from services.platform_extractors.newplatform import NewPlatformExtractor
+
+class PlatformExtractorRegistry:
+    def __init__(self) -> None:
+        self.extractors = [
+            YouTubeExtractor(),
+            TwitchExtractor(),
+            VimeoExtractor(),
+            NewPlatformExtractor(),  # Nuevo
+        ]
 ```
 
-## 🔍 Code Review
+### 4. Actualizar CSP en `app/core/middleware.py`:
+Si la plataforma requiere cargar iframes o imagenes desde dominios nuevos, agregar a las directivas CSP:
+```python
+# frame-src: agregar dominio del embed
+"frame-src 'self' https://www.youtube.com ... https://embed.newplatform.com"
 
-### Como Autor
-- [ ] Tests pasan localmente
-- [ ] Código sigue convenciones
-- [ ] Documentación actualizada
-- [ ] Sin conflictos con main
-- [ ] Descripción clara del PR
+# img-src: agregar dominio de thumbnails
+"img-src 'self' data: ... https://thumbnails.newplatform.com"
+```
 
-### Como Reviewer
-- [ ] Funcionalidad cumple requisitos
-- [ ] Código es legible y mantenible
-- [ ] Tests adecuados incluidos
-- [ ] No introduce vulnerabilidades
-- [ ] Performance es aceptable
+### 5. Agregar estilos CSS para el badge de plataforma:
+```css
+.badge-newplatform {
+    background-color: #ff0000;
+    color: white;
+}
+```
 
-## 🐛 Debugging
+## Debugging
 
-### Logs Útiles
+### Logs
 ```bash
-# Logs de aplicación
-docker-compose logs -f caos-vision
+# Logs de todos los servicios
+./run.sh --logs
 
-# Logs de Redis
-docker-compose logs -f valkey
+# Logs individuales
+docker compose logs -f caos-admin
+docker compose logs -f caos-viewer
+docker compose logs -f valkey
 
-# Debug Python
-export FLASK_DEBUG=1
-python app.py
+# Debug mode (habilita /api/docs y logs verbose)
+# Configurar DEBUG=true en .env o docker-compose
+```
+
+### Redis/Valkey
+```bash
+# Conectar al CLI de Valkey
+docker compose exec valkey valkey-cli
+
+# Comandos utiles:
+# Ver todas las keys
+KEYS caos:*
+
+# Ver streams almacenados
+HGETALL caos:streams
+
+# Ver sesiones activas
+KEYS caos:session:*
+
+# Ver rate limits activos
+KEYS caos:ratelimit:*
 ```
 
 ### Herramientas Recomendadas
-- **VS Code Debugger**: Para Python
-- **Browser DevTools**: Para frontend
-- **Redis Insight**: Para inspeccionar datos
-- **Docker Desktop**: Para contenedores
+- **VS Code / PyCharm** con extension Python
+- **Browser DevTools** para frontend y WebSockets (tab Network > WS)
+- **Redis Insight** o **RedisInsight** para inspeccionar datos graficamente
 
-## 📚 Recursos
+## Preguntas
 
-### Documentación
-- [Flask Documentation](https://flask.palletsprojects.com/)
-- [SocketIO Documentation](https://python-socketio.readthedocs.io/)
-- [Redis Documentation](https://redis.io/documentation)
-- [Docker Documentation](https://docs.docker.com/)
-
-## 🎖️ Reconocimientos
-
-Los contribuidores son reconocidos en:
-- README principal
-- Página de créditos en la aplicación
-- Releases notes
-
-## ❓ Preguntas
-
-¿Tienes dudas? No dudes en:
 - Abrir un [Discussion](https://github.com/aweher/caos-vision/discussions)
-- Preguntar en Discord
-- Enviar un email
-
----
-
-**¡Gracias por hacer que Caos Vision sea mejor! 🎉** 
+- Enviar email a ariel@weher.net

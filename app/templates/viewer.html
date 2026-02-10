@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_name }} - Viewer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/viewer.css">
+{% endblock %}
+
+{% block body_class %}viewer-page{% endblock %}
+
+{% block content %}
+<div id="grid-container" class="video-grid"
+     style="--rows: {{ layout[0] }}; --cols: {{ layout[1] }};">
+    {% for stream in streams %}
+    <div class="stream-wrapper" data-stream-id="{{ stream.id }}" data-platform="{{ stream.platform }}">
+        <iframe
+            src="{{ stream.embed_url }}{{ '&' if '?' in stream.embed_url else '?' }}autoplay=1&mute={{ '1' if stream.muted else '0' }}"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+            loading="lazy"
+            referrerpolicy="strict-origin-when-cross-origin">
+        </iframe>
+        <div class="stream-overlay">
+            <span class="stream-title">{{ stream.title }}</span>
+            <button class="mute-btn {{ 'muted' if stream.muted else '' }}"
+                    data-stream-id="{{ stream.id }}"
+                    title="{{ 'Unmute' if stream.muted else 'Mute' }}">
+                {{ '🔇' if stream.muted else '🔊' }}
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="empty-state" class="empty-state {% if streams %}hidden{% endif %}">
+    <h2>No streams configured</h2>
+    <p>Add streams from the admin panel to get started.</p>
+</div>
+
+<div id="connection-status" class="connection-status">
+    <span class="status-dot"></span>
+    <span class="status-text">Connecting...</span>
+</div>
+
+<div id="disconnect-overlay" class="disconnect-overlay hidden">
+    <div class="overlay-content">
+        <div class="overlay-icon">&#9888;</div>
+        <h2 class="overlay-title">Connection Lost</h2>
+        <p class="overlay-message">Unable to connect to the administration system</p>
+        <div class="spinner"></div>
+        <p class="overlay-duration">Disconnected for: <span id="disconnect-duration">0s</span></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/websocket-client.js"></script>
+<script src="/static/js/viewer.js"></script>
+{% endblock %}

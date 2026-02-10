@@ -1,42 +1,43 @@
-FROM python:3.11-slim-bullseye
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim-bookworm AS base
 
-# Crear usuario no-root
+# Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-# Instalar dependencias del sistema
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
 
 WORKDIR /app
 
-# Copiar solo requirements primero para cache de Docker
+# Build stage - install dependencies
+FROM base AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY app/requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
-# Instalar dependencias Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Production stage
+FROM base AS production
 
-# Copiar código de la aplicación
-COPY app .
+# Copy pre-built wheels and install
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/* \
+    && rm -rf /wheels
 
-# Hacer ejecutable el script de entrada
-RUN chmod +x entrypoint.sh
+# Copy application code
+COPY app/ .
 
-# Crear directorio para logs
+# Create logs directory
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
-# Cambiar a usuario no-root
+# Switch to non-root user
 USER appuser
 
-# Exponer puerto
-EXPOSE 5000
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:5000', timeout=5)"
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/api/v1/health', timeout=5).raise_for_status()"
 
-# Usar el entrypoint script
-ENTRYPOINT ["./entrypoint.sh"]
-CMD ["--production"]
+# Default command (viewer). Single worker required for WebSocket support.
+CMD ["uvicorn", "viewer_main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

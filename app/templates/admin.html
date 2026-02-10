@@ -1,356 +1,104 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Caos Vision</title>
-    <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --error-color: #e74c3c;
-        }
+{% extends "base.html" %}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f6fa;
-        }
+{% block title %}{{ app_name }} - Admin{% endblock %}
 
-        .admin-container {
-            max-width: 800px;
-            margin: 20px auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        }
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/admin.css">
+{% endblock %}
 
-        h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 30px;
-        }
+{% block body_class %}admin-page{% endblock %}
 
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-        }
-
-        input[type="text"] {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        input[type="text"]:focus {
-            outline: none;
-            border-color: var(--secondary-color);
-        }
-
-        button {
-            padding: 12px 25px;
-            background-color: var(--secondary-color);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            font-size: 16px;
-        }
-
-        button:hover {
-            background-color: #2980b9;
-        }
-
-        .stream-list {
-            margin-top: 30px;
-        }
-
-        .stream-item {
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            margin: 10px 0;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            transition: transform 0.2s;
-        }
-
-        .stream-item:hover {
-            transform: translateX(5px);
-        }
-
-        .stream-info {
-            flex: 1;
-            margin-right: 15px;
-            overflow: hidden;
-        }
-
-        .stream-title {
-            color: var(--primary-color);
-            font-size: 16px;
-            margin-bottom: 5px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .stream-id {
-            color: #7f8c8d;
-            font-size: 12px;
-            font-family: monospace;
-        }
-
-        .stream-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .mute-btn {
-            background-color: #95a5a6;
-        }
-
-        .mute-btn.muted {
-            background-color: var(--error-color);
-        }
-
-        .delete-btn {
-            background-color: var(--error-color);
-        }
-
-        .error-message {
-            color: var(--error-color);
-            text-align: center;
-            margin: 15px 0;
-        }
-
-        .logout-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #7f8c8d;
-        }
-    </style>
-</head>
-<body>
-    <div class="admin-container">
-        <h1>Panel de Administración - Caos Vision</h1>
-        
-        <div class="input-group">
-            <input type="text" id="stream-url" placeholder="Ingresa URL de YouTube...">
-            <button onclick="addStream()">Agregar Stream</button>
-            <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
-        </div>
-
-        <div class="stream-list">
-            <h2>Streams Activos</h2>
-            <div id="streams-container"></div>
-            <div id="error-message" class="error-message"></div>
-        </div>
+{% block content %}
+<header class="admin-header">
+    <h1>{{ app_name }}</h1>
+    <div class="header-actions">
+        <span class="user-info">{{ session.username }}</span>
+        <a href="/logout" class="btn btn-logout">Logout</a>
     </div>
+</header>
 
-    <script>
-        // Verificar autenticación al cargar
-        document.addEventListener('DOMContentLoaded', () => {
-            if (!checkAuth()) {
-                window.location.href = '/login';
-            }
-            updateStreamList();
-            setInterval(updateStreamList, 3000);
-        });
+<main class="admin-main">
+    <section class="add-stream-section">
+        <h2>Add Stream</h2>
+        <form id="add-stream-form" class="add-stream-form">
+            <input
+                type="url"
+                id="stream-url"
+                name="url"
+                placeholder="Paste YouTube, Twitch, or Vimeo URL..."
+                required
+                autocomplete="off">
+            <button type="submit" class="btn btn-primary">Add Stream</button>
+        </form>
+        <div id="form-message" class="form-message hidden"></div>
+        <p class="supported-platforms">
+            Supported: YouTube, Twitch, Vimeo
+        </p>
+    </section>
 
-        async function checkAuth() {
-            try {
-                const response = await fetch('/api/streams', {
-                    credentials: 'include'
-                });
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return false;
-                }
-                return true;
-            } catch (error) {
-                console.error('Error de autenticación:', error);
-                window.location.href = '/login';
-                return false;
-            }
-        }
+    <section class="streams-section">
+        <div class="section-header">
+            <h2>Active Streams (<span id="stream-count">{{ streams|length }}</span>)</h2>
+            <div class="header-controls">
+                <button id="refresh-viewers-btn" class="btn btn-secondary btn-sm" title="Force all viewers to refresh">
+                    Refresh Viewers
+                </button>
+                <div class="layout-info">
+                    Grid: <span id="layout-info">{{ layout[0] }}×{{ layout[1] }}</span>
+                </div>
+            </div>
+        </div>
 
-        async function addStream() {
-            if (!await checkAuth()) return;
-            
-            const urlInput = document.getElementById('stream-url');
-            const url = urlInput.value.trim();
-            
-            // Validaciones mejoradas
-            if (!url) {
-                showError('Por favor ingresa una URL válida');
-                return;
-            }
-            
-            // Validar formato básico de URL de YouTube
-            const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)/;
-            if (!youtubeRegex.test(url)) {
-                showError('Por favor ingresa una URL válida de YouTube');
-                return;
-            }
-            
-            if (url.length > 500) {
-                showError('URL demasiado larga');
-                return;
-            }
-
-            // Deshabilitar botón para prevenir spam
-            const addButton = document.querySelector('button[onclick="addStream()"]');
-            addButton.disabled = true;
-            addButton.textContent = 'Agregando...';
-
-            try {
-                const response = await fetch('/api/streams', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({ url })
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    showError(error.error || 'Error al agregar el stream');
-                    return;
-                }
-
-                urlInput.value = '';
-                showSuccess('Stream agregado exitosamente');
-                updateStreamList();
-            } catch (error) {
-                console.error('Error:', error);
-                showError('Error de conexión con el servidor');
-            } finally {
-                // Rehabilitar botón
-                addButton.disabled = false;
-                addButton.textContent = 'Agregar Stream';
-            }
-        }
-
-        async function updateStreamList() {
-            if (!await checkAuth()) return;
-            
-            try {
-                const response = await fetch('/api/streams', {
-                    credentials: 'include'
-                });
-                
-                if (!response.ok) {
-                    showError('Error obteniendo streams');
-                    return;
-                }
-
-                const streams = await response.json();
-                renderStreams(streams);
-            } catch (error) {
-                showError('Error de conexión');
-            }
-        }
-
-        function renderStreams(streams) {
-            const container = document.getElementById('streams-container');
-            container.innerHTML = streams.map(stream => `
-                <div class="stream-item">
-                    <div class="stream-info">
-                        <div class="stream-title">
-                            <strong>${sanitizeHtml(stream.title || 'Video ' + stream.id)}</strong>
-                        </div>
-                        <div class="stream-id">
-                            ID: ${sanitizeHtml(stream.id)}
-                        </div>
-                    </div>
-                    <div class="stream-actions">
-                        <button class="mute-btn ${stream.muted ? 'muted' : ''}" 
-                                onclick="toggleMute('${sanitizeHtml(stream.id)}')">
-                            ${stream.muted ? '🔇 Activar Sonido' : '🔊 Silenciar'}
-                        </button>
-                        <button class="delete-btn" 
-                                onclick="removeStream('${sanitizeHtml(stream.id)}')">
-                            🗑 Eliminar
-                        </button>
+        <div id="streams-container" class="streams-list">
+            {% for stream in streams %}
+            <div class="stream-item" data-id="{{ stream.id }}">
+                <div class="stream-info">
+                    {% if stream.thumbnail %}
+                    <img class="stream-thumbnail" src="{{ stream.thumbnail }}" alt="" loading="lazy">
+                    {% else %}
+                    <div class="stream-thumbnail placeholder"></div>
+                    {% endif %}
+                    <div class="stream-details">
+                        <span class="stream-title">{{ stream.title }}</span>
+                        <span class="stream-platform badge badge-{{ stream.platform }}">{{ stream.platform }}</span>
                     </div>
                 </div>
-            `).join('');
-        }
+                <div class="stream-actions">
+                    <button class="btn btn-icon btn-mute {{ 'muted' if stream.muted else '' }}"
+                            data-stream-id="{{ stream.id }}"
+                            title="{{ 'Unmute' if stream.muted else 'Mute' }}">
+                        {{ '🔇' if stream.muted else '🔊' }}
+                    </button>
+                    <button class="btn btn-icon btn-delete"
+                            data-stream-id="{{ stream.id }}"
+                            title="Delete stream">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-streams">
+                <p>No streams added yet. Add your first stream above.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
 
-        async function toggleMute(id) {
-            if (!await checkAuth()) return;
-            
-            try {
-                const response = await fetch(`/api/streams/${id}/mute`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-                
-                if (response.ok) {
-                    updateStreamList();
-                }
-            } catch (error) {
-                showError('Error al actualizar el sonido');
-            }
-        }
+    {% if viewer_url %}
+    <section class="preview-section">
+        <h2>Preview</h2>
+        <a href="{{ viewer_url }}" target="_blank" class="btn btn-secondary">Open Viewer in New Tab</a>
+    </section>
+    {% endif %}
+</main>
 
-        async function removeStream(id) {
-            if (!await checkAuth()) return;
-            
-            if (!confirm('¿Estás seguro de eliminar este stream?')) return;
-            
-            try {
-                const response = await fetch(`/api/streams/${id}`, {
-                    method: 'DELETE',
-                    credentials: 'include'
-                });
-                
-                if (response.ok) {
-                    updateStreamList();
-                }
-            } catch (error) {
-                showError('Error al eliminar el stream');
-            }
-        }
+<div id="connection-status" class="connection-status">
+    <span class="status-dot"></span>
+    <span class="status-text">Connecting...</span>
+</div>
+{% endblock %}
 
-        function logout() {
-            fetch('/logout', {
-                method: 'POST',
-                credentials: 'include'
-            }).then(() => {
-                window.location.href = '/login';
-            });
-        }
-
-        function showError(message) {
-            const errorDiv = document.getElementById('error-message');
-            errorDiv.textContent = message;
-            errorDiv.style.color = 'var(--error-color)';
-            setTimeout(() => errorDiv.textContent = '', 5000);
-        }
-        
-        function showSuccess(message) {
-            const errorDiv = document.getElementById('error-message');
-            errorDiv.textContent = message;
-            errorDiv.style.color = 'green';
-            setTimeout(() => errorDiv.textContent = '', 3000);
-        }
-
-        // Sanitizar HTML para prevenir XSS
-        function sanitizeHtml(str) {
-            const temp = document.createElement('div');
-            temp.textContent = str;
-            return temp.innerHTML;
-        }
-    </script>
-</body>
-</html>
+{% block scripts %}
+<script src="/static/js/websocket-client.js"></script>
+<script src="/static/js/admin.js"></script>
+{% endblock %}

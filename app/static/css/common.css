@@ -1,0 +1,325 @@
+/* Common styles for Caos Vision */
+
+:root {
+    --color-bg: #0a0a0a;
+    --color-surface: #1a1a1a;
+    --color-surface-hover: #2a2a2a;
+    --color-primary: #3b82f6;
+    --color-primary-hover: #2563eb;
+    --color-secondary: #6b7280;
+    --color-success: #22c55e;
+    --color-error: #ef4444;
+    --color-warning: #f59e0b;
+    --color-text: #ffffff;
+    --color-text-muted: #9ca3af;
+    --color-border: #374151;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+    --transition: 150ms ease;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all var(--transition);
+    text-decoration: none;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-surface-hover);
+}
+
+.btn-icon {
+    padding: 0.5rem;
+    font-size: 1.25rem;
+    background: transparent;
+    border: 1px solid var(--color-border);
+}
+
+.btn-icon:hover:not(:disabled) {
+    background-color: var(--color-surface-hover);
+}
+
+.btn-full {
+    width: 100%;
+}
+
+.btn-logout {
+    background-color: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+}
+
+.btn-logout:hover {
+    background-color: var(--color-error);
+    color: white;
+    border-color: var(--color-error);
+}
+
+/* Form elements */
+input[type="text"],
+input[type="url"],
+input[type="password"],
+input[type="email"] {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+input::placeholder {
+    color: var(--color-text-muted);
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-radius: var(--radius);
+}
+
+.badge-youtube {
+    background-color: #ff0000;
+    color: white;
+}
+
+.badge-twitch {
+    background-color: #9146ff;
+    color: white;
+}
+
+.badge-vimeo {
+    background-color: #1ab7ea;
+    color: white;
+}
+
+/* Connection status */
+.connection-status {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--color-surface);
+    border-radius: var(--radius);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    z-index: 1000;
+    transition: all var(--transition);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-warning);
+    transition: background-color var(--transition);
+}
+
+.connection-status.connected .status-dot {
+    background-color: var(--color-success);
+}
+
+.connection-status.disconnected .status-dot,
+.connection-status.unhealthy .status-dot {
+    background-color: var(--color-error);
+    animation: pulse-error 1s ease-in-out infinite;
+}
+
+.connection-status.disconnected,
+.connection-status.unhealthy {
+    background-color: rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--color-error);
+}
+
+@keyframes pulse-error {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Disconnect overlay for viewer */
+.disconnect-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    animation: fadeIn 0.3s ease;
+}
+
+.disconnect-overlay.hidden {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.disconnect-overlay .overlay-content {
+    text-align: center;
+    padding: 2rem;
+}
+
+.disconnect-overlay .overlay-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: pulse-error 1.5s ease-in-out infinite;
+}
+
+.disconnect-overlay .overlay-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-error);
+    margin-bottom: 0.5rem;
+}
+
+.disconnect-overlay .overlay-message {
+    font-size: 1rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+}
+
+.disconnect-overlay .overlay-duration {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+}
+
+.disconnect-overlay .overlay-duration span {
+    font-weight: 600;
+    color: var(--color-warning);
+}
+
+.disconnect-overlay .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--color-surface);
+    border-top: 3px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 1rem auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Messages */
+.error-message {
+    padding: 0.75rem;
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius);
+    color: var(--color-error);
+    font-size: 0.875rem;
+}
+
+.success-message {
+    padding: 0.75rem;
+    background-color: rgba(34, 197, 94, 0.1);
+    border: 1px solid var(--color-success);
+    border-radius: var(--radius);
+    color: var(--color-success);
+    font-size: 0.875rem;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+}

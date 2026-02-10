@@ -1,23 +1,22 @@
 ---
 services:
-  caos-vision:
-    build: .
+  caos-viewer:
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+        - linux/arm64
     ports:
-      - "64500:5000"
+      - "64500:8000"
     environment:
       - REDIS_URL=redis://valkey:6379/0
-      - FLASK_ENV=production
-      - GUNICORN_WORKERS=4
-      - SESSION_COOKIE_SECURE=true
-      - ADMIN_USER=admin
-      - ADMIN_PASS=mi_password_seguro
-      - SESSION_SECRET_KEY=mi_clave_secreta_compleja
-      # Configuración para Cloudflare Tunnel
-      - ALLOWED_ORIGINS=
-      - CLOUDFLARE_TUNNEL=true
-      - BEHIND_PROXY=true
-    # Usar el entrypoint definido en el Dockerfile
-    # command se puede omitir ya que CMD está definido en Dockerfile
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-admin}
+      - DEBUG=false
+      - CLOUDFLARE_TUNNEL=${CLOUDFLARE_TUNNEL:-false}
+      - BEHIND_PROXY=${BEHIND_PROXY:-false}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
     depends_on:
       valkey:
         condition: service_healthy
@@ -27,9 +26,52 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /var/tmp
     volumes:
       - ./logs:/app/logs:rw
+    command: ["uvicorn", "viewer_main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/v1/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+
+  caos-admin:
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    ports:
+      - "64501:8000"
+    environment:
+      - REDIS_URL=redis://valkey:6379/0
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-admin}
+      - DEBUG=false
+      - CLOUDFLARE_TUNNEL=${CLOUDFLARE_TUNNEL:-false}
+      - BEHIND_PROXY=${BEHIND_PROXY:-false}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - VIEWER_URL=${VIEWER_URL:-}
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./logs:/app/logs:rw
+    command: ["uvicorn", "admin_main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/v1/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
 
   valkey:
     image: valkey/valkey:7-alpine
@@ -43,8 +85,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-    sysctls:
-      - net.core.somaxconn=65535
     command: [
       "valkey-server",
       "--maxmemory", "256mb",

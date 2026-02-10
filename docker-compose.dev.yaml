@@ -1,0 +1,71 @@
+---
+services:
+  caos-viewer:
+    build:
+      context: .
+      target: production
+    ports:
+      - "64500:8000"
+    environment:
+      - REDIS_URL=redis://valkey:6379/0
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-admin}
+      - DEBUG=true
+      - CLOUDFLARE_TUNNEL=false
+      - BEHIND_PROXY=false
+      - ALLOWED_ORIGINS=*
+    depends_on:
+      valkey:
+        condition: service_healthy
+    volumes:
+      - ./app:/app:ro
+    command: ["uvicorn", "viewer_main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+    read_only: false
+    restart: "no"
+
+  caos-admin:
+    build:
+      context: .
+      target: production
+    ports:
+      - "64501:8000"
+    environment:
+      - REDIS_URL=redis://valkey:6379/0
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-admin}
+      - DEBUG=true
+      - CLOUDFLARE_TUNNEL=false
+      - BEHIND_PROXY=false
+      - ALLOWED_ORIGINS=*
+      - VIEWER_URL=http://localhost:64500
+    depends_on:
+      valkey:
+        condition: service_healthy
+    volumes:
+      - ./app:/app:ro
+    command: ["uvicorn", "admin_main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+    read_only: false
+    restart: "no"
+
+  valkey:
+    image: valkey/valkey:7-alpine
+    volumes:
+      - valkey_data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: [
+      "valkey-server",
+      "--maxmemory", "256mb",
+      "--maxmemory-policy", "allkeys-lru"
+    ]
+
+volumes:
+  valkey_data:
