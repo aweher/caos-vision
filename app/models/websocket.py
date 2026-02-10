@@ -1,6 +1,6 @@
 """WebSocket message models."""
 
-from typing import List, Literal, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
@@ -48,6 +48,13 @@ class StreamMutedMessage(WSMessageBase):
     muted: bool
 
 
+class StreamSpotlightMessage(WSMessageBase):
+    """Stream spotlight (fullscreen) state changed."""
+
+    type: Literal["stream_spotlight"] = "stream_spotlight"
+    stream_id: Optional[str]  # None = exit spotlight
+
+
 class ErrorMessage(WSMessageBase):
     """Error message."""
 
@@ -82,6 +89,7 @@ WSServerMessage = Union[
     StreamAddedMessage,
     StreamRemovedMessage,
     StreamMutedMessage,
+    StreamSpotlightMessage,
     ErrorMessage,
     PongMessage,
 ]

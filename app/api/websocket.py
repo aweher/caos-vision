@@ -12,6 +12,7 @@ from models.websocket import (
     StreamAddedMessage,
     StreamMutedMessage,
     StreamRemovedMessage,
+    StreamSpotlightMessage,
     StreamUpdateMessage,
 )
 from services.redis_service import RedisService
@@ -143,6 +144,12 @@ async def broadcast_full_update(
 ) -> None:
     """Broadcast full stream list update to all clients across all services."""
     message = StreamUpdateMessage(streams=streams, layout=layout)
+    await _publish_broadcast(message.model_dump(), target="all")
+
+
+async def broadcast_stream_spotlight(stream_id: Optional[str]) -> None:
+    """Broadcast stream spotlight (fullscreen) command to all clients across all services."""
+    message = StreamSpotlightMessage(stream_id=stream_id)
     await _publish_broadcast(message.model_dump(), target="all")
 
 
@@ -300,6 +307,10 @@ async def admin_websocket(
             elif msg_type == "force_viewer_refresh":
                 await broadcast_force_refresh()
                 logger.info("Admin triggered force refresh for all viewers")
+            elif msg_type == "spotlight_stream":
+                stream_id = data.get("stream_id")  # None to clear spotlight
+                await broadcast_stream_spotlight(stream_id)
+                logger.info("Admin toggled spotlight: %s", stream_id or "off")
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
 

@@ -135,3 +135,17 @@
 .video-grid[style*="--rows: 1"][style*="--cols: 1"] .stream-wrapper::after {
     display: none;
 }
+
+/* Spotlight mode - admin-controlled fullscreen */
+.video-grid.spotlight-mode .stream-wrapper {
+    display: none;
+}
+
+.video-grid.spotlight-mode .stream-wrapper.spotlighted {
+    display: block;
+}
+
+/* Hide the double-click hint when in spotlight mode */
+.video-grid.spotlight-mode .stream-wrapper::after {
+    display: none;
+}

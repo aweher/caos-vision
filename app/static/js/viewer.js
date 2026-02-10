@@ -9,6 +9,10 @@ class StreamViewer {
         this.disconnectOverlay = document.getElementById('disconnect-overlay');
         this.players = new Map();
 
+        // Spotlight state
+        this.spotlightStreamId = null;
+        this.savedLayout = null;
+
         // Connection monitoring
         this.healthCheckInterval = null;
         this.healthCheckIntervalMs = 15000; // Check every 15 seconds
@@ -35,6 +39,7 @@ class StreamViewer {
 
         // Admin commands
         this.ws.on('force_refresh', () => this.handleForceRefresh());
+        this.ws.on('stream_spotlight', (data) => this.handleSpotlight(data));
     }
 
     handleConnect() {
@@ -228,6 +233,12 @@ class StreamViewer {
 
     handleStreamRemoved(data) {
         const { stream_id, layout } = data;
+
+        // Exit spotlight if the removed stream was spotlighted
+        if (this.spotlightStreamId === stream_id) {
+            this.exitSpotlight();
+        }
+
         this.updateGridLayout(layout);
         this.removePlayer(stream_id);
 
@@ -240,6 +251,7 @@ class StreamViewer {
         const player = this.players.get(stream_id);
         if (player) {
             this.updatePlayerMuteState(player, muted);
+            this.reloadPlayerWithMuteState(player);
         }
     }
 
@@ -257,6 +269,11 @@ class StreamViewer {
     }
 
     updateGridLayout(layout) {
+        // When in spotlight mode, save the new layout but don't apply it yet
+        if (this.spotlightStreamId) {
+            this.savedLayout = layout;
+            return;
+        }
         const [rows, cols] = layout;
         this.container.style.setProperty('--rows', rows);
         this.container.style.setProperty('--cols', cols);
@@ -381,6 +398,66 @@ class StreamViewer {
 
         const separator = url.includes('?') ? '&' : '?';
         return `${url}${separator}${params.toString()}`;
+    }
+
+    handleSpotlight(data) {
+        const streamId = data.stream_id || null;
+
+        if (streamId) {
+            // Only enter spotlight if the stream exists
+            if (this.players.has(streamId)) {
+                this.enterSpotlight(streamId);
+            }
+        } else {
+            this.exitSpotlight();
+        }
+    }
+
+    enterSpotlight(streamId) {
+        // Save current layout before overriding
+        if (!this.spotlightStreamId) {
+            const rows = this.container.style.getPropertyValue('--rows');
+            const cols = this.container.style.getPropertyValue('--cols');
+            this.savedLayout = [parseInt(rows) || 1, parseInt(cols) || 1];
+        }
+
+        this.spotlightStreamId = streamId;
+
+        // Set grid to 1x1
+        this.container.style.setProperty('--rows', 1);
+        this.container.style.setProperty('--cols', 1);
+
+        // Add spotlight class to container
+        this.container.classList.add('spotlight-mode');
+
+        // Mark the spotlighted stream and hide others
+        for (const [id, player] of this.players) {
+            if (id === streamId) {
+                player.wrapper.classList.add('spotlighted');
+            } else {
+                player.wrapper.classList.remove('spotlighted');
+            }
+        }
+    }
+
+    exitSpotlight() {
+        if (!this.spotlightStreamId) return;
+
+        this.spotlightStreamId = null;
+
+        // Remove spotlight classes
+        this.container.classList.remove('spotlight-mode');
+        for (const [, player] of this.players) {
+            player.wrapper.classList.remove('spotlighted');
+        }
+
+        // Restore saved layout
+        if (this.savedLayout) {
+            const [rows, cols] = this.savedLayout;
+            this.container.style.setProperty('--rows', rows);
+            this.container.style.setProperty('--cols', cols);
+            this.savedLayout = null;
+        }
     }
 
     toggleFullscreen(element) {

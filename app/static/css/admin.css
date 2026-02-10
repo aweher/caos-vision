@@ -178,6 +178,17 @@ section h2 {
     gap: 0.5rem;
 }
 
+.btn-spotlight.active {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.btn-spotlight:hover {
+    background-color: var(--color-primary);
+    color: white;
+    opacity: 0.85;
+}
+
 .btn-mute.muted {
     color: var(--color-error);
 }

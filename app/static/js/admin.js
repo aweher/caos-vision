@@ -11,6 +11,8 @@ class AdminPanel {
         this.layoutInfoEl = document.getElementById('layout-info');
         this.statusEl = document.getElementById('connection-status');
 
+        this.spotlightStreamId = null;
+
         this.ws = new WebSocketClient('/ws/admin');
         this.setupEventHandlers();
         this.setupUI();
@@ -26,6 +28,7 @@ class AdminPanel {
         this.ws.on('stream_added', (data) => this.handleStreamAdded(data));
         this.ws.on('stream_removed', (data) => this.handleStreamRemoved(data));
         this.ws.on('stream_muted', (data) => this.handleMuteChange(data));
+        this.ws.on('stream_spotlight', (data) => this.handleSpotlightChange(data));
     }
 
     setupUI() {
@@ -43,10 +46,13 @@ class AdminPanel {
 
         // Delegate button clicks
         this.streamsContainer.addEventListener('click', (e) => {
+            const spotlightBtn = e.target.closest('.btn-spotlight');
             const muteBtn = e.target.closest('.btn-mute');
             const deleteBtn = e.target.closest('.btn-delete');
 
-            if (muteBtn) {
+            if (spotlightBtn) {
+                this.toggleSpotlight(spotlightBtn.dataset.streamId);
+            } else if (muteBtn) {
                 this.toggleMute(muteBtn.dataset.streamId);
             } else if (deleteBtn) {
                 this.deleteStream(deleteBtn.dataset.streamId);
@@ -81,6 +87,10 @@ class AdminPanel {
         if (item) {
             item.remove();
         }
+        // Clear spotlight if the removed stream was spotlighted
+        if (this.spotlightStreamId === data.stream_id) {
+            this.spotlightStreamId = null;
+        }
         this.updateStreamCount();
         this.updateLayoutInfo(data.layout);
     }
@@ -93,6 +103,26 @@ class AdminPanel {
             btn.textContent = data.muted ? '🔇' : '🔊';
             btn.title = data.muted ? 'Unmute' : 'Mute';
         }
+    }
+
+    handleSpotlightChange(data) {
+        this.spotlightStreamId = data.stream_id || null;
+        this.updateSpotlightUI();
+    }
+
+    toggleSpotlight(streamId) {
+        // Toggle: if same stream is already spotlighted, clear it
+        const newId = this.spotlightStreamId === streamId ? null : streamId;
+        this.ws.send({ type: 'spotlight_stream', stream_id: newId });
+    }
+
+    updateSpotlightUI() {
+        // Remove active class from all spotlight buttons
+        this.streamsContainer.querySelectorAll('.btn-spotlight').forEach(btn => {
+            const isActive = btn.dataset.streamId === this.spotlightStreamId;
+            btn.classList.toggle('active', isActive);
+            btn.title = isActive ? 'Remove spotlight' : 'Spotlight this stream';
+        });
     }
 
     async addStream() {
@@ -187,6 +217,8 @@ class AdminPanel {
             ? `<img class="stream-thumbnail" src="${this.escapeHtml(stream.thumbnail)}" alt="" loading="lazy">`
             : `<div class="stream-thumbnail placeholder"></div>`;
 
+        const isSpotlighted = this.spotlightStreamId === stream.id;
+
         return `
             <div class="stream-item" data-id="${stream.id}">
                 <div class="stream-info">
@@ -197,6 +229,11 @@ class AdminPanel {
                     </div>
                 </div>
                 <div class="stream-actions">
+                    <button class="btn btn-icon btn-spotlight ${isSpotlighted ? 'active' : ''}"
+                            data-stream-id="${stream.id}"
+                            title="${isSpotlighted ? 'Remove spotlight' : 'Spotlight this stream'}">
+                        🔍
+                    </button>
                     <button class="btn btn-icon btn-mute ${stream.muted ? 'muted' : ''}"
                             data-stream-id="${stream.id}"
                             title="${stream.muted ? 'Unmute' : 'Mute'}">

@@ -224,3 +224,4 @@ demo/
 .Trashes
 ehthumbs.db
 Thumbs.db
+.cursor/
