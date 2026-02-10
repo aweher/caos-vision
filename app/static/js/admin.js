@@ -117,11 +117,16 @@ class AdminPanel {
     }
 
     updateSpotlightUI() {
-        // Remove active class from all spotlight buttons
+        // Remove active class from all spotlight buttons and update text
         this.streamsContainer.querySelectorAll('.btn-spotlight').forEach(btn => {
             const isActive = btn.dataset.streamId === this.spotlightStreamId;
             btn.classList.toggle('active', isActive);
             btn.title = isActive ? 'Remove spotlight' : 'Spotlight this stream';
+            // Update button text (keep the icon span, update text node)
+            const icon = btn.querySelector('.spotlight-icon');
+            btn.textContent = '';
+            if (icon) btn.appendChild(icon);
+            btn.append(isActive ? ' Spotlighted' : ' Spotlight');
         });
     }
 
@@ -229,10 +234,10 @@ class AdminPanel {
                     </div>
                 </div>
                 <div class="stream-actions">
-                    <button class="btn btn-icon btn-spotlight ${isSpotlighted ? 'active' : ''}"
+                    <button class="btn btn-spotlight ${isSpotlighted ? 'active' : ''}"
                             data-stream-id="${stream.id}"
                             title="${isSpotlighted ? 'Remove spotlight' : 'Spotlight this stream'}">
-                        🔍
+                        <span class="spotlight-icon">💡</span> ${isSpotlighted ? 'Spotlighted' : 'Spotlight'}
                     </button>
                     <button class="btn btn-icon btn-mute ${stream.muted ? 'muted' : ''}"
                             data-stream-id="${stream.id}"

@@ -64,10 +64,10 @@
                     </div>
                 </div>
                 <div class="stream-actions">
-                    <button class="btn btn-icon btn-spotlight"
+                    <button class="btn btn-spotlight"
                             data-stream-id="{{ stream.id }}"
                             title="Spotlight this stream">
-                        🔍
+                        <span class="spotlight-icon">💡</span> Spotlight
                     </button>
                     <button class="btn btn-icon btn-mute {{ 'muted' if stream.muted else '' }}"
                             data-stream-id="{{ stream.id }}"

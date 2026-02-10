@@ -2,6 +2,8 @@
 #
 # Caos Vision - Interactive Setup and Deployment Script
 #
+# Dual architecture: caos-viewer (public) + caos-admin (private) + valkey
+#
 
 set -e
 
@@ -17,6 +19,10 @@ NC='\033[0m' # No Color
 ENV_FILE=".env"
 ENV_EXAMPLE="env.example"
 
+# Default ports
+DEFAULT_VIEWER_PORT=64500
+DEFAULT_ADMIN_PORT=64501
+
 # Functions
 print_banner() {
     echo -e "${CYAN}"
@@ -25,6 +31,7 @@ print_banner() {
     echo "║                      CAOS VISION                          ║"
     echo "║              Multi-Stream Video Wall                      ║"
     echo "║                                                           ║"
+    echo "║       Viewer (public) + Admin (private) + Valkey          ║"
     echo "╚═══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -174,8 +181,21 @@ configure() {
     echo ""
 
     # Network
-    echo -e "${YELLOW}── Network ──${NC}"
-    prompt "Port to expose the service" "64500" PORT
+    echo -e "${YELLOW}── Network (Dual Service Ports) ──${NC}"
+    echo -e "  ${CYAN}Caos Vision runs two services:${NC}"
+    echo -e "    - ${GREEN}Viewer${NC} (public, read-only grid)"
+    echo -e "    - ${GREEN}Admin${NC}  (private, management panel)"
+    echo ""
+    prompt "Viewer port (public)" "$DEFAULT_VIEWER_PORT" VIEWER_PORT
+    prompt "Admin port (private)" "$DEFAULT_ADMIN_PORT" ADMIN_PORT
+
+    echo ""
+
+    # Viewer URL (shown on admin login page)
+    echo -e "${YELLOW}── Viewer URL ──${NC}"
+    echo -e "  ${CYAN}URL shown on the admin login page to link to the viewer.${NC}"
+    echo -e "  ${CYAN}Leave empty for local setups (defaults to http://localhost:VIEWER_PORT).${NC}"
+    prompt "Viewer URL" "" VIEWER_URL
 
     echo ""
 
@@ -231,25 +251,43 @@ RATE_LIMIT_WINDOW=$RATE_LIMIT_WINDOW
 # Proxy
 CLOUDFLARE_TUNNEL=$CLOUDFLARE_TUNNEL
 BEHIND_PROXY=$BEHIND_PROXY
+
+# Viewer URL (shown on admin login page)
+VIEWER_URL=$VIEWER_URL
+
+# Ports (used by docker-compose.override.yaml)
+VIEWER_PORT=$VIEWER_PORT
+ADMIN_PORT=$ADMIN_PORT
 EOF
 
     chmod 600 "$ENV_FILE"
     print_success "Configuration saved"
 }
 
-update_port() {
-    if [ "$PORT" != "64500" ]; then
+update_ports() {
+    local viewer_port="${VIEWER_PORT:-$DEFAULT_VIEWER_PORT}"
+    local admin_port="${ADMIN_PORT:-$DEFAULT_ADMIN_PORT}"
+
+    if [ "$viewer_port" != "$DEFAULT_VIEWER_PORT" ] || [ "$admin_port" != "$DEFAULT_ADMIN_PORT" ]; then
         print_step "Updating port configuration..."
 
-        # Create override file for custom port
         cat > "docker-compose.override.yaml" << EOF
 ---
 services:
-  caos-vision:
+  caos-viewer:
     ports:
-      - "${PORT}:8000"
+      - "${viewer_port}:8000"
+  caos-admin:
+    ports:
+      - "${admin_port}:8000"
 EOF
-        print_success "Port configured to $PORT"
+        print_success "Ports configured: viewer=$viewer_port, admin=$admin_port"
+    else
+        # Remove override file if ports are default
+        if [ -f "docker-compose.override.yaml" ]; then
+            rm -f "docker-compose.override.yaml"
+            print_success "Using default ports: viewer=$DEFAULT_VIEWER_PORT, admin=$DEFAULT_ADMIN_PORT"
+        fi
     fi
 }
 
@@ -271,7 +309,7 @@ build_and_run() {
     echo ""
 
     # Start
-    echo -e "${YELLOW}Starting services...${NC}"
+    echo -e "${YELLOW}Starting services (caos-viewer + caos-admin + valkey)...${NC}"
     $COMPOSE_CMD up -d
 
     echo ""
@@ -279,23 +317,35 @@ build_and_run() {
 }
 
 show_status() {
+    local viewer_port="${VIEWER_PORT:-$DEFAULT_VIEWER_PORT}"
+    local admin_port="${ADMIN_PORT:-$DEFAULT_ADMIN_PORT}"
+
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║                  DEPLOYMENT COMPLETE                      ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${CYAN}Viewer URL:${NC}  http://localhost:${PORT}/"
-    echo -e "  ${CYAN}Admin URL:${NC}   http://localhost:${PORT}/admin"
-    echo -e "  ${CYAN}Login URL:${NC}   http://localhost:${PORT}/login"
+    echo -e "  ${YELLOW}── Viewer (public) ──${NC}"
+    echo -e "  ${CYAN}URL:${NC}         http://localhost:${viewer_port}/"
     echo ""
+    echo -e "  ${YELLOW}── Admin (private) ──${NC}"
+    echo -e "  ${CYAN}Admin URL:${NC}   http://localhost:${admin_port}/admin"
+    echo -e "  ${CYAN}Login URL:${NC}   http://localhost:${admin_port}/login"
     echo -e "  ${CYAN}Username:${NC}    $ADMIN_USER"
     echo -e "  ${CYAN}Password:${NC}    (as configured)"
     echo ""
-    echo -e "  ${YELLOW}Commands:${NC}"
-    echo -e "    View logs:     docker compose logs -f"
-    echo -e "    Stop:          docker compose down"
-    echo -e "    Restart:       docker compose restart"
-    echo -e "    Reconfigure:   ./run.sh"
+    echo -e "  ${YELLOW}── Services ──${NC}"
+    echo -e "  ${CYAN}caos-viewer:${NC}  port ${viewer_port} -> 8000 (public grid)"
+    echo -e "  ${CYAN}caos-admin:${NC}   port ${admin_port} -> 8000 (management panel)"
+    echo -e "  ${CYAN}valkey:${NC}       internal (Redis-compatible store)"
+    echo ""
+    echo -e "  ${YELLOW}── Commands ──${NC}"
+    echo -e "    View logs:         docker compose logs -f"
+    echo -e "    Viewer logs:       docker compose logs -f caos-viewer"
+    echo -e "    Admin logs:        docker compose logs -f caos-admin"
+    echo -e "    Stop:              docker compose down"
+    echo -e "    Restart:           docker compose restart"
+    echo -e "    Reconfigure:       ./run.sh"
     echo ""
 }
 
@@ -316,6 +366,10 @@ dev_mode() {
 
     echo ""
     echo -e "${YELLOW}Starting services with live reload...${NC}"
+    echo -e "  ${CYAN}Viewer:${NC} http://localhost:${DEFAULT_VIEWER_PORT}/"
+    echo -e "  ${CYAN}Admin:${NC}  http://localhost:${DEFAULT_ADMIN_PORT}/admin"
+    echo -e "  ${CYAN}Login:${NC}  http://localhost:${DEFAULT_ADMIN_PORT}/login"
+    echo ""
     $COMPOSE_CMD -f docker-compose.dev.yaml up
 
     echo ""
@@ -324,17 +378,24 @@ dev_mode() {
 show_help() {
     echo "Usage: $0 [OPTION]"
     echo ""
+    echo "Caos Vision - Multi-Stream Video Wall"
+    echo "Runs two services: Viewer (public) + Admin (private) + Valkey"
+    echo ""
     echo "Options:"
     echo "  --configure, -c    Run configuration wizard only"
     echo "  --start, -s        Start services (requires existing .env)"
     echo "  --dev, -d          Start in development mode with live reload"
     echo "  --stop             Stop services"
     echo "  --restart          Restart services"
-    echo "  --logs, -l         Show logs"
+    echo "  --logs, -l         Show logs (all services)"
     echo "  --status           Show service status"
     echo "  --help, -h         Show this help message"
     echo ""
     echo "Without options, runs the full setup wizard."
+    echo ""
+    echo "Default ports:"
+    echo "  Viewer (public):   $DEFAULT_VIEWER_PORT"
+    echo "  Admin (private):   $DEFAULT_ADMIN_PORT"
 }
 
 # Main script
@@ -346,7 +407,7 @@ main() {
             print_banner
             configure
             write_env_file
-            update_port
+            update_ports
             print_success "Configuration complete. Run '$0 --start' to start services."
             ;;
         --start|-s)
@@ -355,7 +416,8 @@ main() {
                 exit 1
             fi
             source "$ENV_FILE"
-            PORT=${PORT:-64500}
+            VIEWER_PORT=${VIEWER_PORT:-$DEFAULT_VIEWER_PORT}
+            ADMIN_PORT=${ADMIN_PORT:-$DEFAULT_ADMIN_PORT}
             build_and_run
             show_status
             ;;
@@ -393,10 +455,11 @@ main() {
             if ! load_existing_config; then
                 configure
                 write_env_file
-                update_port
+                update_ports
             else
                 source "$ENV_FILE"
-                PORT=${PORT:-64500}
+                VIEWER_PORT=${VIEWER_PORT:-$DEFAULT_VIEWER_PORT}
+                ADMIN_PORT=${ADMIN_PORT:-$DEFAULT_ADMIN_PORT}
             fi
 
             echo ""
