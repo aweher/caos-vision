@@ -138,6 +138,7 @@ section h2 {
     gap: 1rem;
     flex: 1;
     min-width: 0;
+    overflow: hidden;
 }
 
 .stream-thumbnail {
@@ -164,6 +165,7 @@ section h2 {
     flex-direction: column;
     gap: 0.25rem;
     min-width: 0;
+    overflow: hidden;
 }
 
 .stream-title {
@@ -175,7 +177,10 @@ section h2 {
 
 .stream-actions {
     display: flex;
+    align-items: center;
     gap: 0.5rem;
+    flex-shrink: 0;
+    margin-left: 1rem;
 }
 
 .btn-spotlight {
@@ -191,6 +196,7 @@ section h2 {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    white-space: nowrap;
 }
 
 .btn-spotlight .spotlight-icon {
