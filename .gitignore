@@ -225,3 +225,5 @@ demo/
 ehthumbs.db
 Thumbs.db
 .cursor/
+# Claude Code settings
+.claude/

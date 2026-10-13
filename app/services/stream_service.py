@@ -6,7 +6,13 @@ import math
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
-from core.exceptions import DuplicateStreamError, InvalidURLError, StreamNotFoundError
+from config import settings
+from core.exceptions import (
+    DuplicateStreamError,
+    InvalidURLError,
+    StreamLimitError,
+    StreamNotFoundError,
+)
 from models.stream import StreamCreate, StreamInDB, StreamResponse
 from services.platform_extractors import registry
 from services.redis_service import RedisService
@@ -23,6 +29,9 @@ class StreamService:
 
     async def add_stream(self, stream_data: StreamCreate) -> StreamResponse:
         """Add a new stream from URL."""
+        if await self.redis.get_stream_count() >= settings.max_streams:
+            raise StreamLimitError(settings.max_streams)
+
         url = str(stream_data.url)
 
         # Find appropriate extractor

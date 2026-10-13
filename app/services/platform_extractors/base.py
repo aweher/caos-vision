@@ -2,8 +2,33 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional
+from urllib.parse import urlparse
+
+import httpx
 
 from models.stream import StreamMetadata, StreamPlatform
+
+
+def extract_hostname(url: str) -> Optional[str]:
+    """Return the lowercase hostname of a URL, or None if it has no host."""
+    try:
+        return urlparse(url).hostname
+    except ValueError:
+        return None
+
+
+_oembed_client: Optional[httpx.AsyncClient] = None
+
+
+def get_oembed_client() -> httpx.AsyncClient:
+    """Shared async HTTP client for oEmbed requests (lazy singleton)."""
+    global _oembed_client
+    if _oembed_client is None:
+        _oembed_client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            timeout=5.0,
+        )
+    return _oembed_client
 
 
 class BasePlatformExtractor(ABC):

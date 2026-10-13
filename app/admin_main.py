@@ -4,14 +4,15 @@ import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
-from fastapi import Cookie, Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from api.deps import get_current_session, get_session_service, get_stream_service
+from api.deps import get_current_session, get_stream_service
 from api.v1.admin_router import admin_router
 from api.websocket import init_broadcast, start_pubsub_listener, websocket_router
 from config import settings
@@ -19,8 +20,9 @@ from core.exceptions import setup_exception_handlers
 from core.middleware import setup_middleware
 from models.auth import SessionInfo
 from services.redis_service import RedisService
-from services.session_service import SessionService
 from services.stream_service import StreamService
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     logger.info("Starting %s Admin...", settings.app_name)
+    if not settings.debug:
+        if settings.admin_pass == "admin":
+            logger.warning("ADMIN_PASS is using the default value 'admin' in production")
+        if settings.secret_key == "change-me-in-production":
+            logger.warning("SECRET_KEY is using the default value in production")
     try:
         app.state.redis = await RedisService.create(settings.redis_url)
         init_broadcast(app.state.redis)
@@ -76,7 +83,7 @@ setup_middleware(app)
 setup_exception_handlers(app)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # Include API router (auth + streams + health)
 app.include_router(admin_router, prefix="/api/v1")
@@ -85,7 +92,7 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(websocket_router)
 
 # Setup templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 # Page routes
@@ -111,9 +118,9 @@ async def login_page(
     csrf_token = secrets.token_urlsafe(32)
 
     response = templates.TemplateResponse(
+        request,
         "login.html",
         {
-            "request": request,
             "app_name": settings.app_name,
             "csrf_token": csrf_token,
             "viewer_url": settings.viewer_url,
@@ -149,9 +156,9 @@ async def admin_page(
     layout = StreamService.calculate_layout(len(streams))
 
     return templates.TemplateResponse(
+        request,
         "admin.html",
         {
-            "request": request,
             "streams": streams,
             "layout": layout,
             "session": session,
@@ -159,18 +166,3 @@ async def admin_page(
             "viewer_url": settings.viewer_url,
         },
     )
-
-
-@app.get("/logout")
-async def logout_redirect(
-    request: Request,
-    session_id: Optional[str] = Cookie(default=None),
-    session: Optional[SessionInfo] = Depends(get_current_session),
-    session_service: SessionService = Depends(get_session_service),
-) -> RedirectResponse:
-    """Logout, invalidate server-side session, and redirect to login page."""
-    if session_id:
-        await session_service.logout(session_id)
-    response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie(key="session_id", path="/")
-    return response

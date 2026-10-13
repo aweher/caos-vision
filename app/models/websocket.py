@@ -22,6 +22,7 @@ class StreamUpdateMessage(WSMessageBase):
     type: Literal["stream_update"] = "stream_update"
     streams: List[StreamResponse]
     layout: Tuple[int, int]
+    spotlight: Optional[str] = None
 
 
 class StreamAddedMessage(WSMessageBase):
@@ -74,6 +75,12 @@ class PongMessage(WSMessageBase):
     type: Literal["pong"] = "pong"
 
 
+class ForceRefreshMessage(WSMessageBase):
+    """Force viewers to reload the page."""
+
+    type: Literal["force_refresh"] = "force_refresh"
+
+
 # Client -> Server messages
 
 
@@ -81,6 +88,19 @@ class RequestRefreshMessage(WSMessageBase):
     """Request full refresh."""
 
     type: Literal["request_refresh"] = "request_refresh"
+
+
+class SpotlightCommandMessage(WSMessageBase):
+    """Admin command to enter/exit spotlight mode."""
+
+    type: Literal["spotlight_stream"] = "spotlight_stream"
+    stream_id: Optional[str] = None  # None = exit spotlight
+
+
+class ForceViewerRefreshMessage(WSMessageBase):
+    """Admin command to force all viewers to refresh."""
+
+    type: Literal["force_viewer_refresh"] = "force_viewer_refresh"
 
 
 # Type aliases for message unions
@@ -92,6 +112,12 @@ WSServerMessage = Union[
     StreamSpotlightMessage,
     ErrorMessage,
     PongMessage,
+    ForceRefreshMessage,
 ]
 
-WSClientMessage = Union[RequestRefreshMessage, PingMessage]
+WSClientMessage = Union[
+    RequestRefreshMessage,
+    PingMessage,
+    SpotlightCommandMessage,
+    ForceViewerRefreshMessage,
+]

@@ -32,17 +32,16 @@ class SessionService:
             RateLimitError: If too many failed attempts
             AuthenticationError: If credentials are invalid
         """
-        # Check rate limit
-        is_allowed, remaining = await self.redis.check_rate_limit(
+        # Atomically check and increment rate limit
+        allowed, retry_after = await self.redis.check_and_increment_rate_limit(
             client_ip,
             max_attempts=settings.rate_limit_attempts,
             window=settings.rate_limit_window,
         )
 
-        if not is_allowed:
-            ttl = await self.redis.get_rate_limit_ttl(client_ip)
+        if not allowed:
             logger.warning("Rate limit exceeded for IP: %s", client_ip)
-            raise RateLimitError(retry_after=ttl)
+            raise RateLimitError(retry_after=retry_after)
 
         # Verify credentials using constant-time comparison
         username_valid = hmac.compare_digest(
@@ -51,10 +50,6 @@ class SessionService:
         password_valid = verify_password(credentials.password, settings.admin_pass)
 
         if not (username_valid and password_valid):
-            # Increment failed attempts
-            await self.redis.increment_rate_limit(
-                client_ip, window=settings.rate_limit_window
-            )
             logger.warning("Failed login attempt from IP: %s", client_ip)
             raise AuthenticationError("Invalid username or password")
 

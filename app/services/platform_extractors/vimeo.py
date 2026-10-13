@@ -4,10 +4,12 @@ import logging
 import re
 from typing import Optional
 
-import httpx
-
 from models.stream import StreamMetadata, StreamPlatform
-from services.platform_extractors.base import BasePlatformExtractor
+from services.platform_extractors.base import (
+    BasePlatformExtractor,
+    extract_hostname,
+    get_oembed_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,10 @@ class VimeoExtractor(BasePlatformExtractor):
 
     def can_handle(self, url: str) -> bool:
         """Check if URL is a Vimeo URL."""
-        return "vimeo.com" in url.lower()
+        hostname = extract_hostname(url)
+        if not hostname:
+            return False
+        return hostname == "vimeo.com" or hostname.endswith(".vimeo.com")
 
     def extract_id(self, url: str) -> Optional[str]:
         """Extract Vimeo video ID from URL."""
@@ -43,19 +48,17 @@ class VimeoExtractor(BasePlatformExtractor):
     async def get_metadata(self, video_id: str) -> StreamMetadata:
         """Fetch video metadata from Vimeo oEmbed API."""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://vimeo.com/api/oembed.json",
-                    params={"url": f"https://vimeo.com/{video_id}"},
-                    timeout=5.0,
+            response = await get_oembed_client().get(
+                "https://vimeo.com/api/oembed.json",
+                params={"url": f"https://vimeo.com/{video_id}"},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return StreamMetadata(
+                    title=data.get("title", f"Vimeo Video {video_id}"),
+                    thumbnail=data.get("thumbnail_url"),
+                    author=data.get("author_name"),
                 )
-                if response.status_code == 200:
-                    data = response.json()
-                    return StreamMetadata(
-                        title=data.get("title", f"Vimeo Video {video_id}"),
-                        thumbnail=data.get("thumbnail_url"),
-                        author=data.get("author_name"),
-                    )
         except Exception as e:
             logger.warning("Failed to fetch Vimeo metadata for %s: %s", video_id, e)
 

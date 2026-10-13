@@ -5,7 +5,7 @@ import re
 from typing import Optional
 
 from models.stream import StreamMetadata, StreamPlatform
-from services.platform_extractors.base import BasePlatformExtractor
+from services.platform_extractors.base import BasePlatformExtractor, extract_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,10 @@ class TwitchExtractor(BasePlatformExtractor):
 
     def can_handle(self, url: str) -> bool:
         """Check if URL is a Twitch URL."""
-        return "twitch.tv" in url.lower()
+        hostname = extract_hostname(url)
+        if not hostname:
+            return False
+        return hostname == "twitch.tv" or hostname.endswith(".twitch.tv")
 
     def extract_id(self, url: str) -> Optional[str]:
         """Extract Twitch channel name or VOD ID from URL.

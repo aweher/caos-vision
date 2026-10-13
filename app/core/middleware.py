@@ -25,8 +25,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Check if behind Cloudflare
-        behind_cloudflare = bool(request.headers.get("cf-ray"))
+        # Restrict WebSocket connections to the request's own host
+        hostname = request.url.hostname or ""
+        connect_src = f"'self' ws://{hostname} wss://{hostname}"
 
         # Build CSP directives
         csp_parts = [
@@ -42,20 +43,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "https://www.youtube-nocookie.com https://player.twitch.tv "
                 "https://player.vimeo.com"
             ),
-            "connect-src 'self' wss: ws:",
+            f"connect-src {connect_src}",
             "font-src 'self'",
             "form-action 'self'",
             "base-uri 'self'",
             "object-src 'none'",
         ]
 
-        if not behind_cloudflare:
+        if not settings.cloudflare_tunnel:
             csp_parts.append("frame-ancestors 'none'")
 
         response.headers["Content-Security-Policy"] = "; ".join(csp_parts)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = (
-            "SAMEORIGIN" if behind_cloudflare else "DENY"
+            "SAMEORIGIN" if settings.cloudflare_tunnel else "DENY"
         )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = (
@@ -69,10 +70,13 @@ def setup_middleware(app: FastAPI) -> None:
     """Setup all middleware for the application."""
 
     # CORS middleware
+    allowed_origins = settings.get_allowed_origins()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.get_allowed_origins(),
-        allow_credentials=True,
+        allow_origins=allowed_origins,
+        # Credentials with a wildcard origin make Starlette reflect any
+        # Origin header; only allow credentials with explicit origins
+        allow_credentials=allowed_origins != ["*"],
         allow_methods=["GET", "POST", "DELETE", "PATCH", "OPTIONS"],
         allow_headers=["*"],
     )

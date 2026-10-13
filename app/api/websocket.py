@@ -7,8 +7,11 @@ from typing import Optional, Set, Tuple
 
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 
+from api.deps import sanitize_host
 from models.stream import StreamResponse
 from models.websocket import (
+    ErrorMessage,
+    ForceRefreshMessage,
     StreamAddedMessage,
     StreamMutedMessage,
     StreamRemovedMessage,
@@ -77,7 +80,7 @@ class ConnectionManager:
     async def _broadcast(self, connections: Set[WebSocket], message: dict) -> None:
         """Send message to a set of connections."""
         disconnected = []
-        for connection in connections:
+        for connection in set(connections):
             try:
                 await connection.send_json(message)
             except Exception:
@@ -143,7 +146,8 @@ async def broadcast_full_update(
     streams: list[StreamResponse], layout: Tuple[int, int]
 ) -> None:
     """Broadcast full stream list update to all clients across all services."""
-    message = StreamUpdateMessage(streams=streams, layout=layout)
+    spotlight = await _redis.get_spotlight() if _redis is not None else None
+    message = StreamUpdateMessage(streams=streams, layout=layout, spotlight=spotlight)
     await _publish_broadcast(message.model_dump(), target="all")
 
 
@@ -155,7 +159,8 @@ async def broadcast_stream_spotlight(stream_id: Optional[str]) -> None:
 
 async def broadcast_force_refresh() -> None:
     """Broadcast force refresh command to all viewers across all services."""
-    await _publish_broadcast({"type": "force_refresh"}, target="viewers")
+    message = ForceRefreshMessage()
+    await _publish_broadcast(message.model_dump(), target="viewers")
 
 
 async def _publish_broadcast(message: dict, target: str = "all") -> None:
@@ -224,7 +229,7 @@ async def viewer_websocket(
 ) -> None:
     """WebSocket endpoint for viewers (public, no auth required)."""
     redis: RedisService = websocket.app.state.redis
-    host = websocket.headers.get("host", "localhost").split(":")[0]
+    host = sanitize_host(websocket.headers.get("host"), websocket.url.hostname)
     stream_service = StreamService(redis, host=host)
 
     await manager.connect_viewer(websocket)
@@ -233,23 +238,46 @@ async def viewer_websocket(
         # Send initial state
         streams = await stream_service.get_all_streams()
         layout = StreamService.calculate_layout(len(streams))
+        spotlight = await redis.get_spotlight()
 
         await websocket.send_json(
-            StreamUpdateMessage(streams=streams, layout=layout).model_dump()
+            StreamUpdateMessage(
+                streams=streams, layout=layout, spotlight=spotlight
+            ).model_dump()
         )
 
         # Keep connection alive and handle client messages
+        awaiting_pong = False
         while True:
             try:
                 data = await asyncio.wait_for(websocket.receive_json(), timeout=30)
-                if data.get("type") == "ping":
-                    await websocket.send_json({"type": "pong"})
             except asyncio.TimeoutError:
-                # Send ping to keep connection alive
+                if awaiting_pong:
+                    logger.debug("Viewer WebSocket missed pong, closing connection")
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
+                    break
                 try:
                     await websocket.send_json({"type": "ping"})
+                    awaiting_pong = True
                 except Exception:
                     break
+                continue
+            except json.JSONDecodeError:
+                await websocket.close(code=1003)
+                break
+
+            if not isinstance(data, dict):
+                await websocket.close(code=1003)
+                break
+
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif msg_type == "pong":
+                awaiting_pong = False
 
     except WebSocketDisconnect:
         pass
@@ -279,7 +307,7 @@ async def admin_websocket(
         await websocket.close(code=4001, reason="Invalid session")
         return
 
-    host = websocket.headers.get("host", "localhost").split(":")[0]
+    host = sanitize_host(websocket.headers.get("host"), websocket.url.hostname)
     stream_service = StreamService(redis, host=host)
 
     await manager.connect_admin(websocket)
@@ -288,27 +316,73 @@ async def admin_websocket(
         # Send initial state
         streams = await stream_service.get_all_streams()
         layout = StreamService.calculate_layout(len(streams))
+        spotlight = await redis.get_spotlight()
 
         await websocket.send_json(
-            StreamUpdateMessage(streams=streams, layout=layout).model_dump()
+            StreamUpdateMessage(
+                streams=streams, layout=layout, spotlight=spotlight
+            ).model_dump()
         )
 
         # Handle client messages
+        missed_pings = 0
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=60)
+            except asyncio.TimeoutError:
+                missed_pings += 1
+                if missed_pings >= 2:
+                    logger.debug("Admin WebSocket missed pongs, closing connection")
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
+                    break
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+                continue
+            except json.JSONDecodeError:
+                await websocket.close(code=1003)
+                break
+
+            if not isinstance(data, dict):
+                await websocket.close(code=1003)
+                break
+
+            missed_pings = 0
             msg_type = data.get("type")
 
             if msg_type == "request_refresh":
                 streams = await stream_service.get_all_streams()
                 layout = StreamService.calculate_layout(len(streams))
+                spotlight = await redis.get_spotlight()
                 await websocket.send_json(
-                    StreamUpdateMessage(streams=streams, layout=layout).model_dump()
+                    StreamUpdateMessage(
+                        streams=streams, layout=layout, spotlight=spotlight
+                    ).model_dump()
                 )
             elif msg_type == "force_viewer_refresh":
                 await broadcast_force_refresh()
                 logger.info("Admin triggered force refresh for all viewers")
             elif msg_type == "spotlight_stream":
                 stream_id = data.get("stream_id")  # None to clear spotlight
+                if stream_id is not None and not isinstance(stream_id, str):
+                    await websocket.send_json(
+                        ErrorMessage(message="stream_id inválido").model_dump()
+                    )
+                    continue
+                if stream_id is not None:
+                    stream = await redis.get_stream(stream_id)
+                    if not stream:
+                        await websocket.send_json(
+                            ErrorMessage(
+                                message=f"Stream no encontrado: {stream_id}"
+                            ).model_dump()
+                        )
+                        continue
+                await redis.set_spotlight(stream_id)
                 await broadcast_stream_spotlight(stream_id)
                 logger.info("Admin toggled spotlight: %s", stream_id or "off")
             elif msg_type == "ping":

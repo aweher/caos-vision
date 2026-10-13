@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -17,6 +18,8 @@ from core.exceptions import setup_exception_handlers
 from core.middleware import setup_middleware
 from services.redis_service import RedisService
 from services.stream_service import StreamService
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # Configure logging
 logging.basicConfig(
@@ -72,7 +75,7 @@ setup_middleware(app)
 setup_exception_handlers(app)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # Include API router (streams GET + health)
 app.include_router(viewer_router, prefix="/api/v1")
@@ -81,7 +84,7 @@ app.include_router(viewer_router, prefix="/api/v1")
 app.include_router(websocket_router)
 
 # Setup templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 # Page routes
@@ -97,9 +100,9 @@ async def viewer_page(
     layout = StreamService.calculate_layout(len(streams))
 
     return templates.TemplateResponse(
+        request,
         "viewer.html",
         {
-            "request": request,
             "streams": streams,
             "layout": layout,
             "app_name": settings.app_name,

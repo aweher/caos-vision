@@ -30,6 +30,7 @@ class StreamViewer {
         this.ws.on('connect', () => this.handleConnect());
         this.ws.on('disconnect', () => this.handleDisconnect());
         this.ws.on('health_change', (data) => this.handleHealthChange(data));
+        this.ws.on('max_reconnect_attempts', () => this.handleMaxReconnectAttempts());
 
         // Stream events
         this.ws.on('stream_update', (data) => this.handleFullUpdate(data));
@@ -218,6 +219,36 @@ class StreamViewer {
         this.updateGridLayout(layout);
         this.syncStreams(streams);
         this.updateEmptyState(streams.length === 0);
+        if (data.spotlight !== undefined) {
+            this.handleSpotlight({ stream_id: data.spotlight });
+        }
+    }
+
+    handleMaxReconnectAttempts() {
+        this.disconnectedSince = null;
+        this.stopDisconnectTimer();
+        this.updateConnectionStatus('disconnected');
+        if (this.disconnectOverlay) {
+            const messageEl = this.disconnectOverlay.querySelector('.overlay-message');
+            if (messageEl) {
+                messageEl.textContent = 'Conexión perdida. Recargá la página.';
+            }
+            const spinnerEl = this.disconnectOverlay.querySelector('.spinner');
+            if (spinnerEl) {
+                spinnerEl.classList.add('hidden');
+            }
+            const durationEl = this.disconnectOverlay.querySelector('.overlay-duration');
+            if (durationEl && !durationEl.querySelector('.reload-btn')) {
+                durationEl.textContent = '';
+                const reloadBtn = document.createElement('button');
+                reloadBtn.type = 'button';
+                reloadBtn.className = 'btn btn-primary reload-btn';
+                reloadBtn.textContent = 'Recargar página';
+                reloadBtn.addEventListener('click', () => window.location.reload());
+                durationEl.appendChild(reloadBtn);
+            }
+            this.disconnectOverlay.classList.remove('hidden');
+        }
     }
 
     handleStreamAdded(data) {
@@ -386,6 +417,9 @@ class StreamViewer {
                 // Just update muted state
                 if (url.includes('muted=')) {
                     url = url.replace(/muted=(true|false)/, `muted=${stream.muted}`);
+                } else {
+                    const separator = url.includes('?') ? '&' : '?';
+                    url = `${url}${separator}muted=${stream.muted}`;
                 }
                 return url;
 

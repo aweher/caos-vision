@@ -41,10 +41,8 @@ class Settings(BaseSettings):
     cloudflare_tunnel: bool = False
     behind_proxy: bool = False
 
-    # Server
-    host: str = "0.0.0.0"
-    port: int = 8000
-    workers: int = 4
+    # Streams
+    max_streams: int = 50
 
 
 settings = Settings()

@@ -4,10 +4,12 @@ import logging
 import re
 from typing import Optional
 
-import httpx
-
 from models.stream import StreamMetadata, StreamPlatform
-from services.platform_extractors.base import BasePlatformExtractor
+from services.platform_extractors.base import (
+    BasePlatformExtractor,
+    extract_hostname,
+    get_oembed_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +34,12 @@ class YouTubeExtractor(BasePlatformExtractor):
 
     def can_handle(self, url: str) -> bool:
         """Check if URL is a YouTube URL."""
-        return any(
-            domain in url.lower()
-            for domain in ["youtube.com", "youtu.be", "youtube-nocookie.com"]
-        )
+        hostname = extract_hostname(url)
+        if not hostname:
+            return False
+        if hostname in ("youtube.com", "youtu.be", "youtube-nocookie.com"):
+            return True
+        return hostname.endswith(".youtube.com")
 
     def extract_id(self, url: str) -> Optional[str]:
         """Extract YouTube video ID from URL."""
@@ -52,22 +56,20 @@ class YouTubeExtractor(BasePlatformExtractor):
     async def get_metadata(self, video_id: str) -> StreamMetadata:
         """Fetch video metadata from YouTube oEmbed API."""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://www.youtube.com/oembed",
-                    params={
-                        "url": f"https://www.youtube.com/watch?v={video_id}",
-                        "format": "json",
-                    },
-                    timeout=5.0,
+            response = await get_oembed_client().get(
+                "https://www.youtube.com/oembed",
+                params={
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "format": "json",
+                },
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return StreamMetadata(
+                    title=data.get("title", f"YouTube Video {video_id}"),
+                    thumbnail=f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+                    author=data.get("author_name"),
                 )
-                if response.status_code == 200:
-                    data = response.json()
-                    return StreamMetadata(
-                        title=data.get("title", f"YouTube Video {video_id}"),
-                        thumbnail=f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-                        author=data.get("author_name"),
-                    )
         except Exception as e:
             logger.warning("Failed to fetch YouTube metadata for %s: %s", video_id, e)
 

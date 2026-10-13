@@ -1,5 +1,6 @@
 """Dependency injection for API endpoints."""
 
+import re
 from typing import Optional
 
 from fastapi import Cookie, Depends, Request
@@ -11,6 +12,17 @@ from models.auth import SessionInfo
 from services.redis_service import RedisService
 from services.session_service import SessionService
 from services.stream_service import StreamService
+
+_HOST_HEADER_RE = re.compile(r"^[A-Za-z0-9.-]+$|^\[[0-9A-Fa-f:]+\]$")
+
+
+def sanitize_host(raw_host: Optional[str], fallback: Optional[str]) -> str:
+    """Return raw_host if it is a valid hostname/IP, else the fallback."""
+    if raw_host:
+        candidate = raw_host.strip()
+        if _HOST_HEADER_RE.fullmatch(candidate):
+            return candidate
+    return fallback or "localhost"
 
 
 async def get_redis(request: Request) -> RedisService:
@@ -30,7 +42,8 @@ async def get_stream_service(
     redis: RedisService = Depends(get_redis),
 ) -> StreamService:
     """Get stream service with proper host for embed URLs."""
-    host = request.headers.get("host", "localhost").split(":")[0]
+    raw_host = request.headers.get("host")
+    host = sanitize_host(raw_host, request.url.hostname)
     return StreamService(redis, host=host)
 
 

@@ -34,6 +34,16 @@ class RateLimitError(CaosVisionException):
         )
 
 
+class StreamLimitError(CaosVisionException):
+    """Maximum number of streams reached."""
+
+    def __init__(self, max_streams: int):
+        super().__init__(
+            f"Límite máximo de streams alcanzado ({max_streams})",
+            status_code=429,
+        )
+
+
 class StreamNotFoundError(CaosVisionException):
     """Stream not found."""
 
@@ -72,7 +82,8 @@ def setup_exception_handlers(app: FastAPI) -> None:
     async def rate_limit_handler(
         request: Request, exc: RateLimitError
     ) -> JSONResponse:
-        logger.warning("Rate limit exceeded for %s", request.client.host)
+        client_host = getattr(request.client, "host", None)
+        logger.warning("Rate limit exceeded for %s", client_host)
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},

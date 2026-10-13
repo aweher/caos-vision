@@ -123,9 +123,7 @@ docker compose up -d
 | `CLOUDFLARE_TUNNEL` | `false` | Habilitar soporte para Cloudflare Tunnel |
 | `BEHIND_PROXY` | `false` | Indica si esta detras de un reverse proxy |
 | `VIEWER_URL` | _(vacio)_ | URL del visor (mostrada en la pagina de login del admin) |
-| `HOST` | `0.0.0.0` | Host de escucha |
-| `PORT` | `8000` | Puerto interno del contenedor |
-| `WORKERS` | `4` | Cantidad de workers de Uvicorn |
+| `MAX_STREAMS` | `50` | Limite maximo de streams en el muro |
 
 ## Uso con Cloudflare Tunnel
 
@@ -172,7 +170,7 @@ Ver [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md) para documentacion completa.
 - **Base de datos**: Valkey 7 (compatible con Redis)
 - **Web Server**: Uvicorn con workers
 - **Contenedor**: Docker multi-stage, multi-arquitectura (amd64/arm64)
-- **Seguridad**: bcrypt, itsdangerous, CSP con nonces
+- **Seguridad**: bcrypt, CSP con nonces
 
 ### Estructura del Proyecto
 ```
@@ -186,7 +184,6 @@ caos-vision/
 │   │   ├── deps.py                # Inyeccion de dependencias
 │   │   ├── websocket.py           # WebSocket endpoints + ConnectionManager
 │   │   └── v1/
-│   │       ├── router.py          # Router agregador (legacy)
 │   │       ├── admin_router.py    # Router del admin (auth + streams + health)
 │   │       ├── viewer_router.py   # Router del viewer (streams read-only + health)
 │   │       ├── auth.py            # Endpoints de autenticacion (login/logout/me)

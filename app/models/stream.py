@@ -38,12 +38,6 @@ class StreamCreate(BaseModel):
         return v
 
 
-class StreamUpdate(BaseModel):
-    """Request model for updating stream settings."""
-
-    muted: Optional[bool] = None
-
-
 class StreamInDB(BaseModel):
     """Internal stream representation stored in Redis."""
 

@@ -17,6 +17,7 @@ class RedisService:
     SESSION_PREFIX = "caos:session:"
     RATE_LIMIT_PREFIX = "caos:ratelimit:"
     BROADCAST_CHANNEL = "caos:broadcasts"
+    SPOTLIGHT_KEY = "caos:spotlight"
 
     def __init__(self, pool: ConnectionPool) -> None:
         self.pool = pool
@@ -65,10 +66,11 @@ class RedisService:
 
     async def add_stream(self, stream_id: str, data: Dict[str, Any]) -> bool:
         """Add a new stream."""
-        # Convert datetime to ISO string if present
-        if "created_at" in data and hasattr(data["created_at"], "isoformat"):
-            data["created_at"] = data["created_at"].isoformat()
-        stream_json = json.dumps(data)
+        serialized = dict(data)
+        created_at = serialized.get("created_at")
+        if hasattr(created_at, "isoformat"):
+            serialized["created_at"] = created_at.isoformat()
+        stream_json = json.dumps(serialized)
         await self.redis.hset(self.STREAMS_KEY, stream_id, stream_json)
         logger.info("Stream added: %s", stream_id)
         return True
@@ -79,14 +81,6 @@ class RedisService:
         if result:
             logger.info("Stream deleted: %s", stream_id)
         return bool(result)
-
-    async def update_stream(self, stream_id: str, data: Dict[str, Any]) -> bool:
-        """Update a stream."""
-        existing = await self.get_stream(stream_id)
-        if not existing:
-            return False
-        existing.update(data)
-        return await self.add_stream(stream_id, existing)
 
     # Lua script for atomic toggle_mute (avoids read-modify-write race condition)
     _TOGGLE_MUTE_SCRIPT = """
@@ -162,43 +156,50 @@ class RedisService:
 
     # Rate limiting
 
-    async def check_rate_limit(
-        self, identifier: str, max_attempts: int = 5, window: int = 300
+    _RATE_LIMIT_SCRIPT = """
+    local current = redis.call('INCR', KEYS[1])
+    if current == 1 then
+        redis.call('EXPIRE', KEYS[1], ARGV[1])
+    end
+    if current > tonumber(ARGV[2]) then
+        return {0, redis.call('TTL', KEYS[1])}
+    end
+    return {1, 0}
+    """
+
+    async def check_and_increment_rate_limit(
+        self, identifier: str, max_attempts: int, window: int
     ) -> tuple[bool, int]:
-        """Check if rate limit exceeded. Returns (is_allowed, remaining_attempts)."""
+        """Atomically check and increment the rate limit counter.
+
+        Returns (is_allowed, retry_after): retry_after is the remaining
+        window TTL when not allowed, 0 otherwise.
+        """
         key = f"{self.RATE_LIMIT_PREFIX}{identifier}"
-        current = await self.redis.get(key)
-
-        if current is None:
-            return True, max_attempts
-
-        attempts = int(current)
-        if attempts >= max_attempts:
-            return False, 0
-
-        return True, max_attempts - attempts
-
-    async def increment_rate_limit(
-        self, identifier: str, window: int = 300
-    ) -> int:
-        """Increment rate limit counter. Returns new count."""
-        key = f"{self.RATE_LIMIT_PREFIX}{identifier}"
-        pipe = self.redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, window)
-        results = await pipe.execute()
-        return results[0]
+        allowed, retry_after = await self.redis.eval(
+            self._RATE_LIMIT_SCRIPT, 1, key, window, max_attempts
+        )
+        return bool(allowed), max(0, int(retry_after))
 
     async def reset_rate_limit(self, identifier: str) -> bool:
         """Reset rate limit counter."""
         key = f"{self.RATE_LIMIT_PREFIX}{identifier}"
         return bool(await self.redis.delete(key))
 
-    async def get_rate_limit_ttl(self, identifier: str) -> int:
-        """Get remaining time for rate limit window."""
-        key = f"{self.RATE_LIMIT_PREFIX}{identifier}"
-        ttl = await self.redis.ttl(key)
-        return max(0, ttl)
+    # Spotlight
+
+    async def get_spotlight(self) -> Optional[str]:
+        """Get the currently spotlighted stream ID."""
+        return await self.redis.get(self.SPOTLIGHT_KEY)
+
+    async def set_spotlight(self, stream_id: Optional[str]) -> None:
+        """Set or clear the spotlighted stream."""
+        if not stream_id:
+            await self.redis.delete(self.SPOTLIGHT_KEY)
+            logger.info("Spotlight cleared")
+            return
+        await self.redis.set(self.SPOTLIGHT_KEY, stream_id)
+        logger.info("Spotlight set to: %s", stream_id)
 
     # Pub/Sub for cross-service WebSocket broadcasts
 

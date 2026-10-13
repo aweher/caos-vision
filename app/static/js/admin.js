@@ -22,6 +22,7 @@ class AdminPanel {
         // Connection status
         this.ws.on('connect', () => this.updateConnectionStatus('connected'));
         this.ws.on('disconnect', () => this.updateConnectionStatus('disconnected'));
+        this.ws.on('max_reconnect_attempts', () => this.handleMaxReconnectAttempts());
 
         // Stream events
         this.ws.on('stream_update', (data) => this.handleFullUpdate(data));
@@ -42,6 +43,12 @@ class AdminPanel {
         const refreshBtn = document.getElementById('refresh-viewers-btn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.forceRefreshViewers());
+        }
+
+        // Logout button
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => this.logout());
         }
 
         // Delegate button clicks
@@ -65,15 +72,37 @@ class AdminPanel {
         this.showMessage('Refresh command sent to all viewers', 'success');
     }
 
+    async logout() {
+        try {
+            await fetch('/api/v1/auth/logout', {
+                method: 'POST',
+                credentials: 'include'
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+        window.location.href = '/login';
+    }
+
     updateConnectionStatus(status) {
         this.statusEl.className = `connection-status ${status}`;
         const textEl = this.statusEl.querySelector('.status-text');
         textEl.textContent = status === 'connected' ? 'Connected' : 'Reconnecting...';
     }
 
+    handleMaxReconnectAttempts() {
+        this.statusEl.className = 'connection-status disconnected';
+        const textEl = this.statusEl.querySelector('.status-text');
+        textEl.textContent = 'Conexión perdida. Recargá la página.';
+    }
+
     handleFullUpdate(data) {
         this.renderStreamList(data.streams);
         this.updateLayoutInfo(data.layout);
+        if (data.spotlight !== undefined) {
+            this.spotlightStreamId = data.spotlight || null;
+            this.updateSpotlightUI();
+        }
     }
 
     handleStreamAdded(data) {
@@ -223,29 +252,31 @@ class AdminPanel {
             : `<div class="stream-thumbnail placeholder"></div>`;
 
         const isSpotlighted = this.spotlightStreamId === stream.id;
+        const streamId = this.escapeHtml(stream.id);
+        const platform = this.escapeHtml(stream.platform);
 
         return `
-            <div class="stream-item" data-id="${stream.id}">
+            <div class="stream-item" data-id="${streamId}">
                 <div class="stream-info">
                     ${thumbnail}
                     <div class="stream-details">
                         <span class="stream-title">${this.escapeHtml(stream.title)}</span>
-                        <span class="stream-platform badge badge-${stream.platform}">${stream.platform}</span>
+                        <span class="stream-platform badge badge-${platform}">${platform}</span>
                     </div>
                 </div>
                 <div class="stream-actions">
                     <button class="btn btn-spotlight ${isSpotlighted ? 'active' : ''}"
-                            data-stream-id="${stream.id}"
+                            data-stream-id="${streamId}"
                             title="${isSpotlighted ? 'Remove spotlight' : 'Spotlight this stream'}">
                         <span class="spotlight-icon">💡</span> ${isSpotlighted ? 'Spotlighted' : 'Spotlight'}
                     </button>
                     <button class="btn btn-icon btn-mute ${stream.muted ? 'muted' : ''}"
-                            data-stream-id="${stream.id}"
+                            data-stream-id="${streamId}"
                             title="${stream.muted ? 'Unmute' : 'Mute'}">
                         ${stream.muted ? '🔇' : '🔊'}
                     </button>
                     <button class="btn btn-icon btn-delete"
-                            data-stream-id="${stream.id}"
+                            data-stream-id="${streamId}"
                             title="Delete stream">
                         🗑️
                     </button>
