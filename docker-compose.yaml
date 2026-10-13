@@ -3,9 +3,6 @@ services:
   caos-viewer:
     build:
       context: .
-      platforms:
-        - linux/amd64
-        - linux/arm64
     ports:
       - "64500:8000"
     environment:
@@ -39,9 +36,6 @@ services:
   caos-admin:
     build:
       context: .
-      platforms:
-        - linux/amd64
-        - linux/arm64
     ports:
       - "64501:8000"
     environment:
