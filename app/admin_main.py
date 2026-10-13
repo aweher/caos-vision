@@ -18,6 +18,7 @@ from api.websocket import init_broadcast, start_pubsub_listener, websocket_route
 from config import settings
 from core.exceptions import setup_exception_handlers
 from core.middleware import setup_middleware
+from core.security import should_use_secure_cookie
 from models.auth import SessionInfo
 from services.redis_service import RedisService
 from services.stream_service import StreamService
@@ -132,7 +133,7 @@ async def login_page(
         key="csrf_token",
         value=csrf_token,
         httponly=False,  # JS needs to read it
-        secure=not settings.debug,
+        secure=should_use_secure_cookie(request.url.scheme, dict(request.headers)),
         samesite="strict",
         max_age=600,  # 10 minutes
         path="/",

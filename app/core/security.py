@@ -8,6 +8,8 @@ from typing import Optional
 
 import bcrypt
 
+from config import settings
+
 
 def verify_password(password: str, hashed: str) -> bool:
     """Verify password against bcrypt hash using constant-time comparison.
@@ -35,6 +37,22 @@ def generate_session_id(username: str) -> str:
 def generate_nonce() -> str:
     """Generate a CSP nonce."""
     return secrets.token_urlsafe(16)
+
+
+def should_use_secure_cookie(request_scheme: str, headers: dict) -> bool:
+    """Decide whether to set the Secure flag on cookies.
+
+    Browsers reject Secure cookies over plain HTTP, so base the decision on
+    how the client actually reached us instead of the debug flag. When behind
+    a reverse proxy or tunnel, the request scheme is http but the client
+    connection may still be https — check X-Forwarded-Proto in that case.
+    """
+    if request_scheme == "https":
+        return True
+    if settings.behind_proxy or settings.cloudflare_tunnel:
+        proto = headers.get("x-forwarded-proto", "")
+        return proto.split(",")[0].strip() == "https"
+    return False
 
 
 def get_client_ip(

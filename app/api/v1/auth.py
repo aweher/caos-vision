@@ -3,7 +3,16 @@
 import hmac
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 
 from api.deps import (
     get_client_ip_dep,
@@ -12,6 +21,7 @@ from api.deps import (
     require_auth,
 )
 from config import settings
+from core.security import should_use_secure_cookie
 from models.auth import (
     LoginRequest,
     LoginResponse,
@@ -26,6 +36,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=LoginResponse)
 async def login(
     credentials: LoginRequest,
+    request: Request,
     response: Response,
     x_csrf_token: Optional[str] = Header(None, alias="X-CSRF-Token"),
     csrf_token: Optional[str] = Cookie(None),
@@ -53,7 +64,7 @@ async def login(
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=not settings.debug,
+        secure=should_use_secure_cookie(request.url.scheme, dict(request.headers)),
         samesite="lax",
         max_age=settings.session_expire_seconds,
         path="/",

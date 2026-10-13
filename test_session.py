@@ -22,8 +22,8 @@ import sys
 
 import requests
 
-VIEWER_URL = os.environ.get("VIEWER_URL", "http://localhost:64500").rstrip("/")
-ADMIN_URL = os.environ.get("ADMIN_URL", "http://localhost:64501").rstrip("/")
+VIEWER_URL = (os.environ.get("VIEWER_URL") or "http://localhost:64500").rstrip("/")
+ADMIN_URL = (os.environ.get("ADMIN_URL") or "http://localhost:64501").rstrip("/")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
 
